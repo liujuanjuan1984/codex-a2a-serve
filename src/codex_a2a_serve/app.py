@@ -5,11 +5,11 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
+from urllib.parse import unquote
 
 import uvicorn
 from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
-from a2a.server.request_handlers.default_request_handler import DefaultRequestHandler
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
@@ -34,6 +34,7 @@ from .config import Settings
 from .jsonrpc_ext import (
     OpencodeSessionQueryJSONRPCApplication,
 )
+from .request_handler import OpencodeRequestHandler
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +365,7 @@ def create_app(settings: Settings) -> FastAPI:
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
     )
     task_store = InMemoryTaskStore()
-    handler = DefaultRequestHandler(
+    handler = OpencodeRequestHandler(
         agent_executor=executor,
         task_store=task_store,
     )
@@ -454,6 +455,22 @@ def create_app(settings: Settings) -> FastAPI:
                 },
                 status_code=400,
             )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def guard_missing_subscribe_task(request: Request, call_next):
+        path = request.url.path
+        if not path.startswith("/v1/tasks/") or not path.endswith(":subscribe"):
+            return await call_next(request)
+
+        encoded_task_id = path.removeprefix("/v1/tasks/").removesuffix(":subscribe")
+        task_id = unquote(encoded_task_id).strip()
+        if not task_id:
+            return JSONResponse({"error": "Task not found"}, status_code=404)
+
+        task = await task_store.get(task_id)
+        if task is None:
+            return JSONResponse({"error": "Task not found", "task_id": task_id}, status_code=404)
         return await call_next(request)
 
     @app.middleware("http")
