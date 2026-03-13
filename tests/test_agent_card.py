@@ -76,6 +76,10 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
     assert interrupt.params["request_id_field"] == "metadata.shared.interrupt.request_id"
     assert interrupt.params["supported_metadata"] == ["codex.directory"]
     assert interrupt.params["provider_private_metadata"] == ["codex.directory"]
+    assert interrupt.params["errors"]["business_codes"]["INTERRUPT_REQUEST_EXPIRED"] == -32007
+    assert interrupt.params["errors"]["business_codes"]["INTERRUPT_TYPE_MISMATCH"] == -32008
+    assert "expected_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
+    assert "actual_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
 
 
 def test_agent_card_chat_examples_include_project_hint_when_configured() -> None:

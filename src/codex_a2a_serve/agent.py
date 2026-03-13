@@ -720,6 +720,16 @@ class OpencodeAgentExecutor(AgentExecutor):
     async def release_session_claim(self, *, identity: str, session_id: str) -> None:
         await self._release_preferred_session_claim(identity=identity, session_id=session_id)
 
+    async def session_owner_matches(self, *, identity: str, session_id: str) -> bool | None:
+        async with self._lock:
+            owner = self._session_owners.get(session_id)
+            if owner:
+                return owner == identity
+            pending_owner = self._pending_session_claims.get(session_id)
+            if pending_owner:
+                return pending_owner == identity
+        return None
+
     def resolve_directory(self, requested: str | None) -> str | None:
         return self._resolve_and_validate_directory(requested)
 
