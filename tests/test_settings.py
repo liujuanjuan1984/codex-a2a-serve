@@ -21,11 +21,13 @@ def test_settings_valid():
     env = {
         "A2A_BEARER_TOKEN": "test-token",
         "OPENCODE_TIMEOUT": "300",
+        "CODEX_MODEL_REASONING_EFFORT": "high",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
         assert settings.a2a_bearer_token == "test-token"
         assert settings.codex_timeout == 300.0
+        assert settings.codex_model_reasoning_effort == "high"
 
 
 def test_parse_oauth_scopes():

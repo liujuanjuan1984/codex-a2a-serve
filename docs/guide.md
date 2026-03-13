@@ -23,6 +23,8 @@ navigation, start from [README.md](../README.md) instead.
 - `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
 - `CODEX_MODEL`: default model passed to `thread/start`, default `gpt-5.1-codex`
 - `CODEX_MODEL_ID`: per-turn model override passed to `turn/start` (optional)
+- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to
+  Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
 - `CODEX_DIRECTORY`: default Codex working directory (optional)
 - `CODEX_PROVIDER_ID`: deployment metadata only (optional)
 - `CODEX_AGENT`: deployment metadata only (optional)
@@ -60,6 +62,22 @@ navigation, start from [README.md](../README.md) instead.
 
 Compatibility note:
 - Legacy `OPENCODE_*` keys are accepted as fallback aliases for the corresponding `CODEX_*` settings.
+
+## Lightweight Deploy Inheritance
+
+- `scripts/deploy_light.sh` is designed for local/interactive quick start.
+- It preserves already-exported `CODEX_*` shell variables when present.
+- By default it best-effort reads `~/.codex/config.toml` and inherits:
+  - `model`
+  - `model_reasoning_effort`
+- Explicit instance parameters still win over shell / local Codex config:
+  - `codex_model=...`
+  - `codex_model_id=...`
+  - `codex_model_reasoning_effort=...`
+- Before launch, the script prints a Codex config summary so the effective
+  model / reasoning combination is visible.
+- Known high-risk combinations are blocked before startup. Currently this
+  includes `reasoning_effort=xhigh` together with `gpt-5.1-codex*`.
 
 ## Service Behavior
 

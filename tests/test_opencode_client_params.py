@@ -1,5 +1,6 @@
 import asyncio
 import time
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -211,3 +212,67 @@ async def test_unsupported_server_request_returns_jsonrpc_error() -> None:
             },
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() -> None:
+    client = OpencodeClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_cli_bin="codex-custom",
+            codex_model_reasoning_effort="high",
+        )
+    )
+
+    captured: list[tuple] = []
+
+    class _DummyStdin:
+        def write(self, _data: bytes) -> None:
+            return None
+
+        async def drain(self) -> None:
+            return None
+
+    dummy_process = MagicMock()
+    dummy_process.stdin = _DummyStdin()
+    dummy_process.stdout = object()
+    dummy_process.stderr = object()
+    dummy_process.returncode = 0
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        captured.append((args, kwargs))
+        return dummy_process
+
+    async def fake_rpc_request(
+        method: str, params: dict | None = None, *, _skip_ensure: bool = False
+    ):
+        assert method == "initialize"
+        assert _skip_ensure is True
+        return {}
+
+    async def fake_send_json(payload: dict) -> None:
+        assert payload == {"method": "initialized", "params": {}}
+
+    async def fake_stdout_loop() -> None:
+        return None
+
+    async def fake_stderr_loop() -> None:
+        return None
+
+    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
+    client._send_json_message = fake_send_json  # type: ignore[method-assign]
+    client._read_stdout_loop = fake_stdout_loop  # type: ignore[method-assign]
+    client._read_stderr_loop = fake_stderr_loop  # type: ignore[method-assign]
+
+    original = asyncio.create_subprocess_exec
+    asyncio.create_subprocess_exec = fake_create_subprocess_exec  # type: ignore[assignment]
+    try:
+        await client._ensure_started()
+    finally:
+        asyncio.create_subprocess_exec = original  # type: ignore[assignment]
+        await client.close()
+
+    assert captured
+    args, _kwargs = captured[0]
+    assert args[:4] == ("codex-custom", "-c", 'model_reasoning_effort="high"', "app-server")

@@ -65,6 +65,13 @@ class Settings(BaseSettings):
         default="gpt-5.1-codex",
         validation_alias=AliasChoices("CODEX_MODEL", "OPENCODE_MODEL"),
     )
+    codex_model_reasoning_effort: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "CODEX_MODEL_REASONING_EFFORT",
+            "OPENCODE_MODEL_REASONING_EFFORT",
+        ),
+    )
 
     # A2A settings
     a2a_public_url: str = Field(default="http://127.0.0.1:8000", alias="A2A_PUBLIC_URL")
