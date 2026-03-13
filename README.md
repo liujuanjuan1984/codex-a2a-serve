@@ -39,16 +39,20 @@ infrastructure rather than local-only tools:
 - bearer-token auth, payload logging controls, and secret-handling guardrails
 - systemd multi-instance deployment and lightweight local deployment
 
-## Architecture At A Glance
+## Logical Components
 
 ```mermaid
-flowchart LR
-    Client["A2A Client / Hub / App"] --> Gateway["codex-a2a-serve"]
-    Gateway --> Contracts["A2A contracts\nstream/session/interrupt"]
-    Gateway --> Ops["Auth / logging / deployment boundary"]
-    Contracts --> Codex["Codex app-server / CLI runtime"]
-    Ops --> Codex
-    Codex --> Workspace["Shared workspace and provider credentials"]
+flowchart TD
+    A["A2A client"] --> B["FastAPI transport layer"]
+    B --> C["A2A task/message mapping"]
+    C --> D["Codex client adapter"]
+    D --> E["Codex app-server / CLI"]
+
+    B --> F["Auth and request logging"]
+    C --> G["Shared contract normalization"]
+    G --> H["Streaming blocks"]
+    G --> I["Session continuity"]
+    G --> J["Interrupt lifecycle"]
 ```
 
 This repository does not change what Codex fundamentally is. It wraps Codex in
@@ -84,6 +88,15 @@ Read before deployment:
 
 - [SECURITY.md](SECURITY.md)
 - [Deployment Guide](docs/deployment.md)
+
+## Recommended Client Side
+
+If you want a client-side integration layer to consume this service, prefer
+[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
+
+It is a better place for client concerns such as A2A consumption, upstream
+adapter normalization, and application-facing integration, while
+`codex-a2a-serve` stays focused on the server/runtime boundary around Codex.
 
 ## Quick Start
 

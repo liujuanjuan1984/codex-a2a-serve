@@ -21,21 +21,21 @@ It is not responsible for:
 - providing tenant isolation across multiple consumers by default
 - hiding the fact that Codex may still need provider credentials at runtime
 
-## Logical Components
+## Adapter Layers
 
 ```mermaid
-flowchart TD
-    A["A2A client"] --> B["FastAPI transport layer"]
-    B --> C["A2A task/message mapping"]
-    C --> D["Codex client adapter"]
-    D --> E["Codex app-server / CLI"]
-
-    B --> F["Auth and request logging"]
-    C --> G["Shared contract normalization"]
-    G --> H["Streaming blocks"]
-    G --> I["Session continuity"]
-    G --> J["Interrupt lifecycle"]
+flowchart LR
+    Client["A2A Client / Hub / App"] --> Gateway["codex-a2a-serve"]
+    Gateway --> Contracts["A2A contracts\nstream/session/interrupt"]
+    Gateway --> Ops["Auth / logging / deployment boundary"]
+    Contracts --> Codex["Codex app-server / CLI runtime"]
+    Ops --> Codex
+    Codex --> Workspace["Shared workspace and provider credentials"]
 ```
+
+This view emphasizes service responsibility boundaries rather than internal
+module structure. The root [README](../README.md) keeps the more
+implementation-oriented logical component view for first-time readers.
 
 ## Request Flow
 
