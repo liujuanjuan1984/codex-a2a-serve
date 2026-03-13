@@ -98,6 +98,7 @@ class OpencodeClient:
         self._cli_bin = settings.codex_cli_bin
         self._listen = settings.codex_app_server_listen
         self._default_model = settings.codex_model
+        self._model_reasoning_effort = settings.codex_model_reasoning_effort
         self._log_payloads = settings.a2a_log_payloads
 
         self._process: asyncio.subprocess.Process | None = None
@@ -192,11 +193,24 @@ class OpencodeClient:
                 if os.path.exists(npm_global_bin):
                     cli_bin = npm_global_bin
 
+            cli_args: list[str] = [cli_bin]
+            if self._model_reasoning_effort:
+                cli_args.extend(
+                    [
+                        "-c",
+                        f"model_reasoning_effort={json.dumps(self._model_reasoning_effort)}",
+                    ]
+                )
+            cli_args.extend(
+                [
+                    "app-server",
+                    "--listen",
+                    self._listen,
+                ]
+            )
+
             process = await asyncio.create_subprocess_exec(
-                cli_bin,
-                "app-server",
-                "--listen",
-                self._listen,
+                *cli_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
