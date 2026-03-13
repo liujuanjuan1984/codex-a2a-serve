@@ -376,6 +376,36 @@ def create_app(settings: Settings) -> FastAPI:
             return method
         return None
 
+    def _parse_content_length(value: str | None) -> int | None:
+        if value is None:
+            return None
+        try:
+            parsed = int(value)
+        except ValueError:
+            return None
+        return parsed if parsed >= 0 else None
+
+    def _normalize_content_type(value: str | None) -> str:
+        if not value:
+            return ""
+        return value.split(";", 1)[0].strip().lower()
+
+    def _is_json_content_type(content_type: str) -> bool:
+        if not content_type:
+            return False
+        return content_type == "application/json" or content_type.endswith("+json")
+
+    def _decode_payload_preview(body: bytes, *, limit: int) -> str:
+        text = body.decode("utf-8", errors="replace")
+        if limit > 0 and len(text) > limit:
+            return f"{text[:limit]}...[truncated]"
+        return text
+
+    async def _get_request_body(request: Request) -> bytes:
+        body = await request.body()
+        request._body = body  # allow downstream to read again
+        return body
+
     def _looks_like_jsonrpc_message_payload(payload: dict | None) -> bool:
         if payload is None:
             return False
@@ -402,8 +432,7 @@ def create_app(settings: Settings) -> FastAPI:
         }:
             return await call_next(request)
 
-        body = await request.body()
-        request._body = body  # allow downstream to read again
+        body = await _get_request_body(request)
         payload = _parse_json_body(body)
         if _looks_like_jsonrpc_envelope(payload) or _looks_like_jsonrpc_message_payload(payload):
             return JSONResponse(
@@ -439,20 +468,53 @@ def create_app(settings: Settings) -> FastAPI:
         if not settings.a2a_log_payloads:
             return await call_next(request)
 
-        body = await request.body()
-        request._body = body  # allow downstream to read again
         path = request.url.path
-        # Detect session-query JSON-RPC methods regardless of deployment prefixes/root_path.
-        payload = _parse_json_body(body)
-        sensitive_method = _detect_codex_extension_method(payload)
+        limit = settings.a2a_log_body_limit
+        content_type = _normalize_content_type(request.headers.get("content-type"))
+        content_length = _parse_content_length(request.headers.get("content-length"))
 
-        if sensitive_method:
-            logger.debug("A2A request %s %s method=%s", request.method, path, sensitive_method)
-            response = await call_next(request)
-            if isinstance(response, StreamingResponse):
+        sensitive_method: str | None = None
+        request_omit_reason: str | None = None
+
+        if not _is_json_content_type(content_type):
+            request_omit_reason = f"non-json content-type={content_type or 'unknown'}"
+        elif limit > 0 and content_length is None:
+            request_omit_reason = f"missing content-length with limit={limit}"
+        elif limit > 0 and content_length > limit:
+            request_omit_reason = f"content-length={content_length} exceeds limit={limit}"
+        else:
+            body = await _get_request_body(request)
+            payload = _parse_json_body(body)
+            sensitive_method = _detect_codex_extension_method(payload)
+
+            if sensitive_method:
+                logger.debug("A2A request %s %s method=%s", request.method, path, sensitive_method)
+            else:
+                logger.debug(
+                    "A2A request %s %s body=%s",
+                    request.method,
+                    path,
+                    _decode_payload_preview(body, limit=limit),
+                )
+
+        if request_omit_reason:
+            logger.debug(
+                "A2A request %s %s body=[omitted %s]",
+                request.method,
+                path,
+                request_omit_reason,
+            )
+
+        response = await call_next(request)
+        if isinstance(response, StreamingResponse):
+            if sensitive_method:
                 logger.debug("A2A response %s streaming method=%s", path, sensitive_method)
-                return response
-            response_body = getattr(response, "body", b"") or b""
+            else:
+                logger.debug("A2A response %s streaming", path)
+            return response
+
+        response_body = getattr(response, "body", b"") or b""
+        if sensitive_method:
             logger.debug(
                 "A2A response %s status=%s bytes=%s method=%s",
                 path,
@@ -462,31 +524,32 @@ def create_app(settings: Settings) -> FastAPI:
             )
             return response
 
-        body_text = body.decode("utf-8", errors="replace")
-        limit = settings.a2a_log_body_limit
-        if limit > 0 and len(body_text) > limit:
-            body_text = f"{body_text[:limit]}...[truncated]"
-        logger.debug(
-            "A2A request %s %s body=%s",
-            request.method,
-            request.url.path,
-            body_text,
-        )
-
-        response = await call_next(request)
-        if isinstance(response, StreamingResponse):
-            logger.debug("A2A response %s streaming", request.url.path)
+        if request_omit_reason:
+            logger.debug(
+                "A2A response %s status=%s bytes=%s body=[omitted request_%s]",
+                path,
+                response.status_code,
+                len(response_body),
+                request_omit_reason,
+            )
             return response
 
-        response_body = getattr(response, "body", b"") or b""
-        resp_text = response_body.decode("utf-8", errors="replace")
-        if limit > 0 and len(resp_text) > limit:
-            resp_text = f"{resp_text[:limit]}...[truncated]"
+        response_content_type = _normalize_content_type(response.headers.get("content-type"))
+        if not _is_json_content_type(response_content_type):
+            logger.debug(
+                "A2A response %s status=%s bytes=%s body=[omitted non-json content-type=%s]",
+                path,
+                response.status_code,
+                len(response_body),
+                response_content_type or "unknown",
+            )
+            return response
+
         logger.debug(
             "A2A response %s status=%s body=%s",
-            request.url.path,
+            path,
             response.status_code,
-            resp_text,
+            _decode_payload_preview(response_body, limit=limit),
         )
         return response
 
