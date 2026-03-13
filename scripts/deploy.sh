@@ -17,8 +17,6 @@ source "${SCRIPT_DIR}/deploy/provider_secret_env_keys.sh"
 PROVIDER_SECRET_ENV_LIST="$(join_provider_secret_env_keys " | ")"
 
 PROJECT_NAME=""
-GH_TOKEN="${GH_TOKEN:-}"
-A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN:-}"
 A2A_PORT_INPUT=""
 A2A_HOST_INPUT=""
 A2A_PUBLIC_URL_INPUT=""
