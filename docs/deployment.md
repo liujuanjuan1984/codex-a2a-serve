@@ -12,10 +12,10 @@ runtime secret handling, and operational setup.
 - Codex core installed in shared directory
   (default `/opt/.codex`; editable in `scripts/init_system.sh`).
 - This repository available on host in shared directory
-  (default `/opt/codex-a2a/codex-a2a-serve`; editable in
+  (default `/opt/codex-a2a/codex-a2a-server`; editable in
   `scripts/init_system.sh`).
 - A2A virtualenv prepared
-  (default `${OPENCODE_A2A_DIR}/.venv/bin/codex-a2a-serve`).
+  (default `${CODEX_A2A_DIR}/.venv/bin/codex-a2a-server`).
 - `uv` Python pool prepared (default `/opt/uv-python`).
 - systemd available.
 
@@ -122,7 +122,7 @@ GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERS
 ./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1 a2a_public_url=https://a2a.example.com
 ```
 
-Supported CLI keys (case-insensitive): `project`/`project_name`, `data_root`, `a2a_port`, `a2a_host`, `a2a_public_url`, `a2a_streaming`, `a2a_log_level`, `a2a_log_payloads`, `a2a_log_body_limit`, `codex_provider_id`, `codex_model_id`, `codex_lsp`, `repo_url`, `repo_branch`, `codex_timeout`, `codex_timeout_stream`, `git_identity_name`, `git_identity_email`, `enable_secret_persistence`, `update_a2a`, `force_restart`.
+Supported CLI keys (case-insensitive): `project`/`project_name`, `data_root`, `a2a_port`, `a2a_host`, `a2a_public_url`, `a2a_streaming`, `a2a_log_level`, `a2a_log_payloads`, `a2a_log_body_limit`, `codex_provider_id`, `codex_model_id`, `repo_url`, `repo_branch`, `codex_timeout`, `codex_timeout_stream`, `git_identity_name`, `git_identity_email`, `enable_secret_persistence`, `update_a2a`, `force_restart`.
 
 Runtime secret requirements:
 
@@ -154,16 +154,6 @@ Minimal example:
 ```bash
 GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha a2a_port=8010
-```
-
-LSP behavior:
-
-- Deployment default is `OPENCODE_LSP=false` (LSP disabled).
-- To enable LSP for one instance, pass `codex_lsp=true`:
-
-```bash
-GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
-./scripts/deploy.sh project=alpha codex_lsp=true
 ```
 
 Upgrade an existing instance after shared-code update:
@@ -213,7 +203,7 @@ GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" OPENROUTER_API_KEY
 Notes:
 
 - Use model IDs that your Codex installation/provider mapping supports.
-- This deploy layer mainly passes through provider identity/model (`OPENCODE_PROVIDER_ID`/`OPENCODE_MODEL_ID`) and selected provider keys.
+- This deploy layer mainly passes through provider identity/model (`CODEX_PROVIDER_ID`/`CODEX_MODEL_ID`) and selected provider keys.
 - Provider-specific connection settings beyond API key (for example endpoint/base URL, api-version, deployment name) must follow Codex's own provider configuration rules.
 
 ### Current Provider Coverage and Gaps
@@ -270,19 +260,18 @@ Naming rule in the tables below:
 
 | ENV Name | CLI Key | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `OPENCODE_A2A_DIR` | - | Optional | `/opt/codex-a2a/codex-a2a-serve` | Repo path for codex-a2a-serve. |
-| `OPENCODE_CORE_DIR` | - | Optional | `/opt/.codex` | Codex core path. |
+| `CODEX_A2A_DIR` | - | Optional | `/opt/codex-a2a/codex-a2a-server` | Repo path for codex-a2a-server. |
+| `CODEX_CORE_DIR` | - | Optional | `/opt/.codex` | Codex core path. |
 | `UV_PYTHON_DIR` | - | Optional | `/opt/uv-python` | uv Python cache path. |
 | `DATA_ROOT` | `data_root` | Optional | `/data/codex-a2a` | Instance root directory. |
-| `OPENCODE_BIND_HOST` | - | Optional | `127.0.0.1` | Codex bind host. |
-| `OPENCODE_BIND_PORT` | - | Optional | `A2A_PORT + 1` fallback to `4096` | Multi-instance should use unique port. |
-| `OPENCODE_LOG_LEVEL` | - | Optional | `DEBUG` | Codex log level. |
-| `OPENCODE_EXTRA_ARGS` | - | Optional | empty | Extra Codex startup args. |
-| `OPENCODE_PROVIDER_ID` | `codex_provider_id` | Optional | None | Written to `a2a.env`. |
-| `OPENCODE_MODEL_ID` | `codex_model_id` | Optional | None | Written to `a2a.env`. |
-| `OPENCODE_LSP` | `codex_lsp` | Optional | `false` | Global Codex LSP switch for deployed instance. Wrapper injects default `OPENCODE_CONFIG_CONTENT` with this value when `OPENCODE_CONFIG_CONTENT` is unset. |
-| `OPENCODE_TIMEOUT` | `codex_timeout` | Optional | `300` | Codex request timeout (seconds). |
-| `OPENCODE_TIMEOUT_STREAM` | `codex_timeout_stream` | Optional | None | Codex streaming timeout (seconds). |
+| `CODEX_BIND_HOST` | - | Optional | `127.0.0.1` | Codex bind host. |
+| `CODEX_BIND_PORT` | - | Optional | `A2A_PORT + 1` fallback to `4096` | Multi-instance should use unique port. |
+| `CODEX_LOG_LEVEL` | - | Optional | `DEBUG` | Codex log level. |
+| `CODEX_EXTRA_ARGS` | - | Optional | empty | Extra Codex startup args. |
+| `CODEX_PROVIDER_ID` | `codex_provider_id` | Optional | None | Written to `a2a.env`. |
+| `CODEX_MODEL_ID` | `codex_model_id` | Optional | None | Written to `a2a.env`. |
+| `CODEX_TIMEOUT` | `codex_timeout` | Optional | `300` | Codex request timeout (seconds). |
+| `CODEX_TIMEOUT_STREAM` | `codex_timeout_stream` | Optional | None | Codex streaming timeout (seconds). |
 | `GIT_IDENTITY_NAME` | `git_identity_name` | Optional | `Codex-<project>` | Git author/committer name. |
 | `GIT_IDENTITY_EMAIL` | `git_identity_email` | Optional | `<project>@example.com` | Git author/committer email. |
 | `ENABLE_SECRET_PERSISTENCE` | `enable_secret_persistence` | Optional | `false` | Explicitly allow deploy to write root-only secret env files. |
@@ -300,7 +289,7 @@ Naming rule in the tables below:
 | --- | --- | --- | --- |
 | `A2A_PROJECT` | derived from `project=<name>` | `config/a2a.env` | Generated by `setup_instance.sh`; external env injection is not used in deploy flow. |
 
-> Shared paths (`OPENCODE_A2A_DIR`, `OPENCODE_CORE_DIR`, `UV_PYTHON_DIR`,
+> Shared paths (`CODEX_A2A_DIR`, `CODEX_CORE_DIR`, `UV_PYTHON_DIR`,
 > `DATA_ROOT`) default to `init_system.sh` constants; environment overrides are
 > still supported.
 
