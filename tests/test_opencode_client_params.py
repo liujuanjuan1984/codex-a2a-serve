@@ -10,7 +10,7 @@ from codex_a2a_serve.codex_client import (
     OpencodeClient,
     _PendingInterruptRequest,
 )
-from tests.helpers import make_settings
+from tests.helpers import make_settings, replay_codex_notification_fixture
 
 
 @pytest.mark.asyncio
@@ -254,6 +254,60 @@ async def test_handle_notification_normalizes_file_change_output_delta_payload()
         "call_id": "call-file-1",
         "tool": "apply_patch",
         "output_delta": "Updated src/app.py\n",
+    }
+
+
+@pytest.mark.asyncio
+async def test_handle_notification_replays_real_command_execution_fixture() -> None:
+    fixture, events = await replay_codex_notification_fixture(
+        "codex_app_server",
+        "command_execution_output_delta.json",
+    )
+
+    assert fixture["response_text"] == "DONE"
+    assert [event["type"] for event in events] == [
+        "message.part.updated",
+        "message.part.updated",
+        "message.part.updated",
+    ]
+    assert events[0]["properties"]["part"] == {
+        "sessionID": "thr-fixture-command",
+        "messageID": "call-fixture-command",
+        "id": "call-fixture-command",
+        "type": "tool_call",
+        "role": "assistant",
+        "sourceMethod": "commandExecution",
+    }
+    assert [event["properties"]["delta"]["output_delta"] for event in events[:2]] == [
+        "chunk-1\r\n",
+        "chunk-2\r\n",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_handle_notification_replays_real_file_change_fixture() -> None:
+    fixture, events = await replay_codex_notification_fixture(
+        "codex_app_server",
+        "file_change_output_delta.json",
+    )
+
+    assert fixture["response_text"] == "DONE"
+    assert [event["type"] for event in events] == [
+        "message.part.updated",
+        "message.part.updated",
+    ]
+    assert events[0]["properties"]["part"] == {
+        "sessionID": "thr-fixture-file-change",
+        "messageID": "call-fixture-file-change",
+        "id": "call-fixture-file-change",
+        "type": "tool_call",
+        "role": "assistant",
+        "sourceMethod": "fileChange",
+    }
+    assert events[0]["properties"]["delta"] == {
+        "kind": "output_delta",
+        "source_method": "fileChange",
+        "output_delta": "Success. Updated the following files:\nA fixture-from-codex.txt\n",
     }
 
 

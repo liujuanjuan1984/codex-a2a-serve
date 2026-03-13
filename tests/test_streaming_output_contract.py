@@ -6,7 +6,12 @@ from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 from codex_a2a_serve.agent import OpencodeAgentExecutor
 from codex_a2a_serve.codex_client import OpencodeMessage
 from codex_a2a_serve.streaming import extract_interrupt_resolved_event
-from tests.helpers import DummyEventQueue, make_request_context, make_settings
+from tests.helpers import (
+    DummyEventQueue,
+    make_request_context,
+    make_settings,
+    replay_codex_notification_fixture,
+)
 
 
 class DummyStreamingClient:
@@ -174,6 +179,26 @@ def _tool_call_update_event(
             "delta": payload,
         },
     }
+
+
+def _fixture_response_message_id(fixture: dict) -> str:
+    for notification in fixture["notifications"]:
+        if notification.get("method") != "item/agentMessage/delta":
+            continue
+        params = notification.get("params", {})
+        item_id = params.get("itemId")
+        if isinstance(item_id, str) and item_id:
+            return item_id
+    raise AssertionError("fixture is missing item/agentMessage/delta")
+
+
+def _fixture_session_id(fixture: dict) -> str:
+    for notification in fixture["notifications"]:
+        params = notification.get("params", {})
+        thread_id = params.get("threadId")
+        if isinstance(thread_id, str) and thread_id:
+            return thread_id
+    raise AssertionError("fixture is missing threadId")
 
 
 def _step_finish_usage_event(
@@ -949,6 +974,103 @@ async def test_streaming_emits_file_change_output_delta_payloads_as_data_parts()
         "call_id": "call-file-1",
         "tool": "apply_patch",
         "output_delta": "Updated src/app.py\n",
+    }
+
+
+@pytest.mark.asyncio
+async def test_streaming_replays_real_command_execution_fixture_end_to_end() -> None:
+    fixture, normalized_events = await replay_codex_notification_fixture(
+        "codex_app_server",
+        "command_execution_output_delta.json",
+    )
+    client = DummyStreamingClient(
+        stream_events_payload=normalized_events,
+        response_text=fixture["response_text"],
+        response_message_id=_fixture_response_message_id(fixture),
+    )
+    fixture_session_id = _fixture_session_id(fixture)
+
+    async def create_fixture_session(
+        title: str | None = None,
+        *,
+        directory: str | None = None,
+    ) -> str:
+        del title, directory
+        return fixture_session_id
+
+    client.create_session = create_fixture_session  # type: ignore[method-assign]
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(
+            task_id="task-tool-fixture-command",
+            context_id="ctx-tool-fixture-command",
+            text="go",
+        ),
+        queue,
+    )
+
+    tool_updates = [
+        event
+        for event in _artifact_updates(queue)
+        if _artifact_stream_meta(event)["block_type"] == "tool_call"
+    ]
+    assert len(tool_updates) == 2
+    assert [_part_data(event)["output_delta"] for event in tool_updates] == [
+        "chunk-1\r\n",
+        "chunk-2\r\n",
+    ]
+    assert all(_part_data(event)["kind"] == "output_delta" for event in tool_updates)
+    assert all(_part_data(event)["source_method"] == "commandExecution" for event in tool_updates)
+
+
+@pytest.mark.asyncio
+async def test_streaming_replays_real_file_change_fixture_end_to_end() -> None:
+    fixture, normalized_events = await replay_codex_notification_fixture(
+        "codex_app_server",
+        "file_change_output_delta.json",
+    )
+    client = DummyStreamingClient(
+        stream_events_payload=normalized_events,
+        response_text=fixture["response_text"],
+        response_message_id=_fixture_response_message_id(fixture),
+    )
+    fixture_session_id = _fixture_session_id(fixture)
+
+    async def create_fixture_session(
+        title: str | None = None,
+        *,
+        directory: str | None = None,
+    ) -> str:
+        del title, directory
+        return fixture_session_id
+
+    client.create_session = create_fixture_session  # type: ignore[method-assign]
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(
+            task_id="task-tool-fixture-file-change",
+            context_id="ctx-tool-fixture-file-change",
+            text="go",
+        ),
+        queue,
+    )
+
+    tool_updates = [
+        event
+        for event in _artifact_updates(queue)
+        if _artifact_stream_meta(event)["block_type"] == "tool_call"
+    ]
+    assert len(tool_updates) == 1
+    assert _part_data(tool_updates[0]) == {
+        "kind": "output_delta",
+        "source_method": "fileChange",
+        "output_delta": "Success. Updated the following files:\nA fixture-from-codex.txt\n",
     }
 
 
