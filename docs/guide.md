@@ -65,7 +65,7 @@ Configuration note:
 
 ## Lightweight Deploy Inheritance
 
-- `scripts/deploy_light.sh` is a detached current-user background runner.
+- `scripts/deploy_light.sh` is a lightweight current-user foreground launcher.
 - It preserves already-exported `CODEX_*` shell variables when present.
 - By default it best-effort reads `~/.codex/config.toml` and inherits:
   - `model`
@@ -78,23 +78,16 @@ Configuration note:
   model / reasoning combination is visible.
 - Known high-risk combinations are blocked before startup. Currently this
   includes `reasoning_effort=xhigh` together with `gpt-5.1-codex*`.
-- `start` launches the service through `nohup` + `setsid`, so closing the
-  launching terminal should not stop the instance on typical Linux hosts.
-- `start` and `restart` create a new timestamped log file under
-  `logs/light/<instance>-YYYYMMDD-HHMMSS.log`.
-- `logs/light/<instance>.log` is kept as a stable alias to the latest launch,
-  so `tail -f logs/light/<instance>.log` remains a convenient default.
-- `run/light/<instance>.pid` stores the detached service PID, and `status` /
-  `stop` validate that PID against instance-specific environment markers before
-  acting on it.
-- `restart` means `stop` the existing PID first, then `start` a fresh process;
-  it does not reload the old process in place. If the instance is not running,
-  `restart` falls through to a fresh `start`.
-- `status` reports the actual log file for the currently running instance and,
-  when stopped, the most recent log path remembered by the script.
+- `start` runs the service in the foreground and streams logs to stdout/stderr.
+- `deploy_light.sh` no longer manages `stop` / `status` / `restart` or
+  per-instance pid/log files.
+- If you need detached execution, restart policies, or log capture, run
+  `deploy_light.sh start ...` under `nohup`, `pm2`, `systemd`, or another
+  process manager.
 - `deploy_light.sh` is intentionally lighter than `deploy.sh`: it does not add
   a supervisor, auto-restart policy, isolated Linux user, or permission
-  scaffolding. Use `deploy.sh` when you need managed service restart semantics.
+  scaffolding. Use `deploy.sh` when you need a repository-managed service
+  lifecycle.
 
 ## Service Behavior
 

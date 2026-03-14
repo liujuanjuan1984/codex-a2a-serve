@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# Lightweight deploy helper for a single local/background instance.
+# Lightweight deploy helper for a single local foreground instance.
 # No system users, no workspace scaffolding, no permission management.
 #
 # Usage:
-#   A2A_BEARER_TOKEN=<token> ./scripts/deploy_light.sh start workdir=/abs/path [instance=dev] [a2a_host=127.0.0.1] [a2a_port=8000] [a2a_public_url=http://127.0.0.1:8000] [a2a_log_level=INFO] [a2a_streaming=true] [a2a_log_payloads=false] [a2a_log_body_limit=0] [codex_cli_bin=codex] [codex_model=<id>] [codex_model_id=<id>] [codex_model_reasoning_effort=<low|medium|high|xhigh>] [codex_provider_id=<id>] [codex_timeout=120] [codex_timeout_stream=300] [log_root=./logs/light] [pid_root=./run/light]
-#   ./scripts/deploy_light.sh stop [instance=dev] [pid_root=./run/light]
-#   ./scripts/deploy_light.sh status [instance=dev] [pid_root=./run/light]
-#   A2A_BEARER_TOKEN=<token> ./scripts/deploy_light.sh restart workdir=/abs/path [instance=dev]
+#   A2A_BEARER_TOKEN=<token> ./scripts/deploy_light.sh start workdir=/abs/path [instance=dev] [a2a_host=127.0.0.1] [a2a_port=8000] [a2a_public_url=http://127.0.0.1:8000] [a2a_log_level=INFO] [a2a_streaming=true] [a2a_log_payloads=false] [a2a_log_body_limit=0] [codex_cli_bin=codex] [codex_model=<id>] [codex_model_id=<id>] [codex_model_reasoning_effort=<low|medium|high|xhigh>] [codex_provider_id=<id>] [codex_timeout=120] [codex_timeout_stream=300]
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,8 +30,6 @@ CODEX_MODEL_REASONING_EFFORT="${CODEX_MODEL_REASONING_EFFORT:-}"
 CODEX_PROVIDER_ID="${CODEX_PROVIDER_ID:-}"
 CODEX_TIMEOUT="${CODEX_TIMEOUT:-}"
 CODEX_TIMEOUT_STREAM="${CODEX_TIMEOUT_STREAM:-}"
-LOG_ROOT="${ROOT_DIR}/logs/light"
-PID_ROOT="${ROOT_DIR}/run/light"
 A2A_SERVER_BIN=""
 LOCAL_CODEX_MODEL=""
 LOCAL_CODEX_MODEL_REASONING_EFFORT=""
@@ -45,10 +40,13 @@ SERVICE_DEFAULT_CODEX_MODEL="gpt-5.1-codex"
 usage() {
   cat <<'USAGE'
 Usage:
-  A2A_BEARER_TOKEN=<token> ./scripts/deploy_light.sh start workdir=/abs/path [instance=dev] [a2a_host=127.0.0.1] [a2a_port=8000] [a2a_public_url=http://127.0.0.1:8000] [a2a_log_level=INFO] [a2a_streaming=true] [a2a_log_payloads=false] [a2a_log_body_limit=0] [codex_cli_bin=codex] [codex_model=<id>] [codex_model_id=<id>] [codex_model_reasoning_effort=<low|medium|high|xhigh>] [codex_provider_id=<id>] [codex_timeout=120] [codex_timeout_stream=300] [log_root=./logs/light] [pid_root=./run/light]
-  ./scripts/deploy_light.sh stop [instance=dev] [pid_root=./run/light]
-  ./scripts/deploy_light.sh status [instance=dev] [pid_root=./run/light]
-  A2A_BEARER_TOKEN=<token> ./scripts/deploy_light.sh restart workdir=/abs/path [instance=dev]
+  A2A_BEARER_TOKEN=<token> ./scripts/deploy_light.sh start workdir=/abs/path [instance=dev] [a2a_host=127.0.0.1] [a2a_port=8000] [a2a_public_url=http://127.0.0.1:8000] [a2a_log_level=INFO] [a2a_streaming=true] [a2a_log_payloads=false] [a2a_log_body_limit=0] [codex_cli_bin=codex] [codex_model=<id>] [codex_model_id=<id>] [codex_model_reasoning_effort=<low|medium|high|xhigh>] [codex_provider_id=<id>] [codex_timeout=120] [codex_timeout_stream=300]
+
+Notes:
+  - deploy_light.sh is a foreground launcher.
+  - It does not manage stop/status/restart or per-instance pid/log files.
+  - Use nohup, pm2, systemd, or another process manager if you need detached
+    execution, restart policies, or log capture.
 USAGE
 }
 
@@ -109,12 +107,6 @@ for arg in "$@"; do
     codex_timeout_stream)
       CODEX_TIMEOUT_STREAM="$value"
       ;;
-    log_root)
-      LOG_ROOT="$value"
-      ;;
-    pid_root)
-      PID_ROOT="$value"
-      ;;
     *)
       echo "Unknown argument: $arg" >&2
       usage
@@ -131,61 +123,6 @@ fi
 if [[ -z "$A2A_PUBLIC_URL" ]]; then
   A2A_PUBLIC_URL="http://${A2A_HOST}:${A2A_PORT}"
 fi
-
-PID_FILE="${PID_ROOT}/${INSTANCE}.pid"
-LOG_LINK="${LOG_ROOT}/${INSTANCE}.log"
-LOG_PATH_FILE="${PID_ROOT}/${INSTANCE}.logpath"
-LOG_FILE=""
-
-read_pid_file() {
-  if [[ ! -f "$PID_FILE" ]]; then
-    return 1
-  fi
-  local pid
-  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-  if [[ -z "$pid" ]]; then
-    return 1
-  fi
-  printf '%s\n' "$pid"
-}
-
-process_matches_instance() {
-  local pid="$1"
-  local environ_path="/proc/${pid}/environ"
-  if [[ -z "$pid" || ! -r "$environ_path" ]]; then
-    return 1
-  fi
-  if ! grep -zFx "CODEX_A2A_LIGHT_INSTANCE=${INSTANCE}" "$environ_path" >/dev/null 2>&1; then
-    return 1
-  fi
-  if ! grep -zFx "CODEX_A2A_LIGHT_ROOT=${ROOT_DIR}" "$environ_path" >/dev/null 2>&1; then
-    return 1
-  fi
-}
-
-is_running() {
-  local pid
-  pid="$(read_pid_file)" || return 1
-  kill -0 "$pid" >/dev/null 2>&1
-  process_matches_instance "$pid"
-}
-
-remove_pid_file_if_stale() {
-  if [[ -f "$PID_FILE" ]] && ! is_running; then
-    rm -f "$PID_FILE"
-  fi
-}
-
-current_log_file() {
-  if [[ -f "$LOG_PATH_FILE" ]]; then
-    cat "$LOG_PATH_FILE" 2>/dev/null || true
-    return 0
-  fi
-  if [[ -L "$LOG_LINK" || -f "$LOG_LINK" ]]; then
-    printf '%s\n' "$LOG_LINK"
-    return 0
-  fi
-}
 
 read_local_codex_config_value() {
   local key="$1"
@@ -293,19 +230,15 @@ validate_codex_config() {
 
 require_start_prerequisites() {
   if [[ -z "${A2A_BEARER_TOKEN:-}" ]]; then
-    echo "A2A_BEARER_TOKEN is required for start/restart." >&2
+    echo "A2A_BEARER_TOKEN is required for start." >&2
     exit 1
   fi
   if [[ -z "$WORKDIR" ]]; then
-    echo "workdir is required for start/restart." >&2
+    echo "workdir is required for start." >&2
     exit 1
   fi
   if [[ ! -d "$WORKDIR" ]]; then
     echo "workdir does not exist: $WORKDIR" >&2
-    exit 1
-  fi
-  if ! command -v setsid >/dev/null 2>&1; then
-    echo "setsid not found in PATH." >&2
     exit 1
   fi
   if [[ "$CODEX_CLI_BIN" == */* ]]; then
@@ -323,47 +256,8 @@ require_start_prerequisites() {
   validate_codex_config
 }
 
-start_detached_server() {
-  nohup setsid bash -c '
-    set -euo pipefail
-    pid_file="$1"
-    shift
-    printf "%s\n" "$$" >"$pid_file"
-    exec "$@"
-  ' bash "$PID_FILE" "$A2A_SERVER_BIN" </dev/null >>"$LOG_FILE" 2>&1 &
-}
-
-wait_for_running_pid() {
-  local pid=""
-  for _ in $(seq 1 50); do
-    pid="$(read_pid_file 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && is_running; then
-      printf '%s\n' "$pid"
-      return 0
-    fi
-    sleep 0.2
-  done
-  return 1
-}
-
 start_instance() {
   require_start_prerequisites
-  mkdir -p "$PID_ROOT" "$LOG_ROOT"
-  remove_pid_file_if_stale
-  if is_running; then
-    echo "Instance '${INSTANCE}' is already running (pid=$(read_pid_file))."
-    local current_log
-    current_log="$(current_log_file)"
-    if [[ -n "$current_log" ]]; then
-      echo "Log: ${current_log}"
-      echo "Latest log alias: ${LOG_LINK}"
-    fi
-    exit 0
-  fi
-
-  local start_stamp
-  start_stamp="$(date '+%Y%m%d-%H%M%S')"
-  LOG_FILE="${LOG_ROOT}/${INSTANCE}-${start_stamp}.log"
 
   export A2A_HOST
   export A2A_PORT
@@ -396,87 +290,27 @@ start_instance() {
     export CODEX_TIMEOUT_STREAM
   fi
 
-  rm -f "$PID_FILE"
-  start_detached_server
-
-  local pid
-  if ! pid="$(wait_for_running_pid)"; then
-    echo "Failed to start instance '${INSTANCE}'. Check log: $LOG_FILE" >&2
-    rm -f "$PID_FILE"
-    exit 1
-  fi
-
-  printf '%s\n' "$LOG_FILE" >"$LOG_PATH_FILE"
-  ln -sfn "$LOG_FILE" "$LOG_LINK"
-
   cat <<INFO
-Instance '${INSTANCE}' started.
-PID: ${pid}
-Log: ${LOG_FILE}
-Latest log alias: ${LOG_LINK}
+Instance '${INSTANCE}' starting in foreground.
 Agent Card: ${A2A_PUBLIC_URL}/.well-known/agent-card.json
 REST endpoint: ${A2A_PUBLIC_URL}/v1/message:send
 Workdir: ${WORKDIR}
+
+Use nohup, pm2, systemd, or another process manager if you need detached
+execution, restart policies, or persistent log capture.
 INFO
-}
 
-stop_instance() {
-  remove_pid_file_if_stale
-  if ! is_running; then
-    rm -f "$PID_FILE"
-    echo "Instance '${INSTANCE}' is not running."
-    return 0
-  fi
-  local pid
-  pid="$(read_pid_file)"
-  kill "$pid" >/dev/null 2>&1 || true
-  for _ in $(seq 1 30); do
-    if ! kill -0 "$pid" >/dev/null 2>&1; then
-      rm -f "$PID_FILE"
-      echo "Instance '${INSTANCE}' stopped."
-      return 0
-    fi
-    sleep 0.2
-  done
-  kill -9 "$pid" >/dev/null 2>&1 || true
-  rm -f "$PID_FILE"
-  echo "Instance '${INSTANCE}' force-stopped."
-  return 0
-}
-
-status_instance() {
-  remove_pid_file_if_stale
-  local current_log
-  current_log="$(current_log_file)"
-  if is_running; then
-    echo "Instance '${INSTANCE}' is running (pid=$(read_pid_file))."
-    if [[ -n "$current_log" ]]; then
-      echo "Log: ${current_log}"
-      echo "Latest log alias: ${LOG_LINK}"
-    fi
-    exit 0
-  fi
-  echo "Instance '${INSTANCE}' is not running."
-  if [[ -n "$current_log" ]]; then
-    echo "Last log: ${current_log}"
-    echo "Latest log alias: ${LOG_LINK}"
-  fi
-  exit 1
+  exec "$A2A_SERVER_BIN"
 }
 
 case "${ACTION,,}" in
   start)
     start_instance
     ;;
-  stop)
-    stop_instance
-    ;;
-  restart)
-    stop_instance || true
-    start_instance
-    ;;
-  status)
-    status_instance
+  stop|status|restart)
+    echo "deploy_light.sh is a foreground launcher and no longer supports ${ACTION,,}." >&2
+    echo "Use your process manager to stop/restart the process it launched." >&2
+    exit 1
     ;;
   *)
     echo "Unknown action: $ACTION" >&2
