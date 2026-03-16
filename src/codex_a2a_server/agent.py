@@ -289,6 +289,7 @@ class CodexAgentExecutor(AgentExecutor):
                         event_queue=event_queue,
                         stop_event=stop_event,
                         completion_event=stream_completion_event,
+                        heartbeat_seconds=self._client.settings.a2a_stream_heartbeat_seconds,
                         logger=logger,
                         directory=directory,
                     )

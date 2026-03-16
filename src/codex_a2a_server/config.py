@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     a2a_version: str = Field(default="0.1.0", alias="A2A_VERSION")
     a2a_protocol_version: str = Field(default="0.3.0", alias="A2A_PROTOCOL_VERSION")
     a2a_streaming: bool = Field(default=True, alias="A2A_STREAMING")
+    a2a_stream_heartbeat_seconds: float | None = Field(
+        default=None,
+        alias="A2A_STREAM_HEARTBEAT_SECONDS",
+    )
     a2a_log_level: str = Field(default="INFO", alias="A2A_LOG_LEVEL")
     a2a_log_payloads: bool = Field(default=False, alias="A2A_LOG_PAYLOADS")
     a2a_log_body_limit: int = Field(default=0, alias="A2A_LOG_BODY_LIMIT")
@@ -111,6 +115,15 @@ class Settings(BaseSettings):
             if scope:
                 scopes[scope] = ""
         return scopes
+
+    @field_validator("a2a_stream_heartbeat_seconds")
+    @classmethod
+    def validate_stream_heartbeat_seconds(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        if v <= 0:
+            raise ValueError("A2A_STREAM_HEARTBEAT_SECONDS must be greater than 0")
+        return v
 
     @classmethod
     def from_env(cls) -> Settings:

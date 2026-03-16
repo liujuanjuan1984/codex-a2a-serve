@@ -271,6 +271,7 @@ async def consume_codex_stream(
     event_queue: EventQueue,
     stop_event: asyncio.Event,
     completion_event: asyncio.Event,
+    heartbeat_seconds: float | None,
     logger: logging.Logger,
     directory: str | None = None,
 ) -> None:
@@ -279,24 +280,30 @@ async def consume_codex_stream(
     buffered_text_chunk: BufferedTextChunk | None = None
     backoff = 0.5
     max_backoff = 5.0
+    heartbeat_interval = heartbeat_seconds if heartbeat_seconds is not None else None
+    stream_started_at = time.monotonic()
+    last_visible_chunk_at = stream_started_at
+    last_visible_signal_at = stream_started_at
+    current_stream_state = TaskState.working
 
-    async def emit_chunk_now(chunk: NormalizedStreamChunk) -> None:
+    async def emit_chunk_now(chunk: NormalizedStreamChunk) -> bool:
+        nonlocal last_visible_chunk_at, last_visible_signal_at
         if not stream_state.matches_expected_message(chunk.message_id):
-            return
+            return False
         resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
         if isinstance(chunk.part, TextPart) and stream_state.should_drop_initial_user_echo(
             chunk.part.text,
             block_type=chunk.block_type,
             role=chunk.role,
         ):
-            return
+            return False
         should_emit, effective_append = stream_state.register_chunk(
             block_type=chunk.block_type,
             content_key=chunk.content_key,
             append=chunk.append,
         )
         if not should_emit:
-            return
+            return False
         sequence = stream_state.next_sequence()
         await enqueue_artifact_update(
             event_queue=event_queue,
@@ -323,6 +330,10 @@ async def consume_codex_stream(
             effective_append,
             chunk.part.text if isinstance(chunk.part, TextPart) else chunk.part.data,
         )
+        emitted_at = time.monotonic()
+        last_visible_chunk_at = emitted_at
+        last_visible_signal_at = emitted_at
+        return True
 
     def seconds_until_buffer_flush() -> float | None:
         if buffered_text_chunk is None:
@@ -333,13 +344,18 @@ async def consume_codex_stream(
             - (time.monotonic() - buffered_text_chunk.started_at),
         )
 
-    async def flush_buffered_text_chunk() -> None:
+    def seconds_until_idle_heartbeat() -> float | None:
+        if heartbeat_interval is None or completion_event.is_set():
+            return None
+        return max(0.0, heartbeat_interval - (time.monotonic() - last_visible_signal_at))
+
+    async def flush_buffered_text_chunk() -> bool:
         nonlocal buffered_text_chunk
         if buffered_text_chunk is None:
-            return
+            return False
         chunk = buffered_text_chunk.to_chunk()
         buffered_text_chunk = None
-        await emit_chunk_now(chunk)
+        return await emit_chunk_now(chunk)
 
     async def emit_chunks(chunks: list[NormalizedStreamChunk]) -> None:
         nonlocal buffered_text_chunk
@@ -373,6 +389,7 @@ async def consume_codex_stream(
         resolution: str | None = None,
         codex_private: Mapping[str, Any] | None = None,
     ) -> None:
+        nonlocal current_stream_state, last_visible_signal_at
         await flush_buffered_text_chunk()
         sequence = stream_state.next_sequence()
         interrupt_payload: dict[str, Any] = {
@@ -402,6 +419,47 @@ async def consume_codex_stream(
                 ),
             )
         )
+        current_stream_state = state
+        last_visible_signal_at = time.monotonic()
+
+    async def emit_idle_status() -> bool:
+        nonlocal last_visible_signal_at
+        if heartbeat_interval is None or completion_event.is_set():
+            return False
+        if current_stream_state != TaskState.working:
+            return False
+        now = time.monotonic()
+        if (now - last_visible_signal_at) < heartbeat_interval:
+            return False
+        sequence = stream_state.next_sequence()
+        since_last_chunk_ms = int(max(0.0, now - last_visible_chunk_at) * 1000)
+        await event_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.working),
+                final=False,
+                metadata=build_output_metadata(
+                    session_id=session_id,
+                    stream={
+                        "message_id": stream_state.resolve_message_id(None),
+                        "event_id": stream_state.build_event_id(sequence),
+                        "source": "heartbeat",
+                        "sequence": sequence,
+                        "idle": True,
+                        "since_last_chunk_ms": since_last_chunk_ms,
+                    },
+                ),
+            )
+        )
+        last_visible_signal_at = time.monotonic()
+        logger.debug(
+            "Stream idle heartbeat task_id=%s session_id=%s since_last_chunk_ms=%s",
+            task_id,
+            session_id,
+            since_last_chunk_ms,
+        )
+        return True
 
     def new_chunk(
         *,
@@ -613,6 +671,13 @@ async def consume_codex_stream(
                     if pending_event_task is None:
                         pending_event_task = asyncio.create_task(anext(stream_iter))
                     wait_timeout = seconds_until_buffer_flush()
+                    heartbeat_timeout = seconds_until_idle_heartbeat()
+                    if heartbeat_timeout is not None:
+                        wait_timeout = (
+                            heartbeat_timeout
+                            if wait_timeout is None
+                            else min(wait_timeout, heartbeat_timeout)
+                        )
                     if completion_event.is_set():
                         if wait_timeout is None:
                             wait_timeout = _STREAM_COMPLETION_DRAIN_SECONDS
@@ -624,14 +689,16 @@ async def consume_codex_stream(
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     if pending_event_task not in done:
+                        emitted_chunk = await flush_buffered_text_chunk()
                         if completion_event.is_set():
-                            await flush_buffered_text_chunk()
                             pending_event_task.cancel()
                             with suppress(asyncio.CancelledError):
                                 await pending_event_task
                             pending_event_task = None
                             break
-                        await flush_buffered_text_chunk()
+                        if emitted_chunk:
+                            continue
+                        await emit_idle_status()
                         continue
                     try:
                         event = pending_event_task.result()

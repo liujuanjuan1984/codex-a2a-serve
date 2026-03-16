@@ -525,6 +525,116 @@ async def test_streaming_includes_usage_in_final_status_metadata() -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_emits_idle_heartbeat_when_enabled() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="late answer"),
+        ],
+        stream_event_delays=[0.03],
+        response_text="late answer",
+        send_delay=0.05,
+    )
+    client.settings = make_settings(
+        a2a_bearer_token="test",
+        codex_base_url="http://localhost",
+        a2a_stream_heartbeat_seconds=0.01,
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="task-heartbeat", context_id="ctx-heartbeat", text="hello"),
+        queue,
+    )
+
+    idle_statuses = [
+        event
+        for event in queue.events
+        if isinstance(event, TaskStatusUpdateEvent)
+        and event.final is False
+        and (event.metadata or {}).get("shared", {}).get("stream", {}).get("idle") is True
+    ]
+    assert idle_statuses
+    idle_stream_meta = _status_shared_meta(idle_statuses[0])["stream"]
+    assert idle_statuses[0].status.state == TaskState.working
+    assert idle_stream_meta["source"] == "heartbeat"
+    assert idle_stream_meta["idle"] is True
+    assert idle_stream_meta["since_last_chunk_ms"] >= 10
+    assert isinstance(idle_stream_meta["sequence"], int)
+
+
+@pytest.mark.asyncio
+async def test_streaming_does_not_emit_idle_heartbeat_when_disabled() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="late answer"),
+        ],
+        stream_event_delays=[0.03],
+        response_text="late answer",
+        send_delay=0.05,
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(
+            task_id="task-heartbeat-disabled",
+            context_id="ctx-heartbeat-disabled",
+            text="hello",
+        ),
+        queue,
+    )
+
+    idle_statuses = [
+        event
+        for event in queue.events
+        if isinstance(event, TaskStatusUpdateEvent)
+        and (event.metadata or {}).get("shared", {}).get("stream", {}).get("idle") is True
+    ]
+    assert idle_statuses == []
+
+
+@pytest.mark.asyncio
+async def test_streaming_does_not_emit_idle_heartbeat_while_input_is_required() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _permission_asked_event(session_id="ses-1", request_id="perm-heartbeat"),
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
+        ],
+        stream_event_delays=[0.0, 0.03],
+        response_text="answer",
+        send_delay=0.05,
+    )
+    client.settings = make_settings(
+        a2a_bearer_token="test",
+        codex_base_url="http://localhost",
+        a2a_stream_heartbeat_seconds=0.01,
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(
+            task_id="task-heartbeat-input",
+            context_id="ctx-heartbeat-input",
+            text="hello",
+        ),
+        queue,
+    )
+
+    idle_statuses = [
+        event
+        for event in queue.events
+        if isinstance(event, TaskStatusUpdateEvent)
+        and (event.metadata or {}).get("shared", {}).get("stream", {}).get("idle") is True
+    ]
+    assert idle_statuses == []
+
+
+@pytest.mark.asyncio
 async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[

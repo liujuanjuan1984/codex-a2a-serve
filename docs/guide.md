@@ -47,6 +47,7 @@ navigation, start from [README.md](../README.md) instead.
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
 - `A2A_STREAMING`: enable SSE streaming (`/v1/message:stream`), default `true`
+- `A2A_STREAM_HEARTBEAT_SECONDS`: 客户端可见 idle 心跳阈值（秒）；未设置时禁用
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
@@ -173,6 +174,11 @@ pm2 stop codex-a2a-light-dev
   metadata may include
   normalized token usage at `metadata.shared.usage` with fields like
   `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
+  当配置 `A2A_STREAM_HEARTBEAT_SECONDS` 后，服务会在长时间没有新的客户端可见
+  stream signal 时补发 `TaskStatusUpdateEvent(final=false, state=working)`，
+  并在 `metadata.shared.stream` 中附带 `idle=true`、
+  `since_last_chunk_ms`、`source=heartbeat` 与 `sequence`。若此前尚未发出任何
+  artifact chunk，则 `since_last_chunk_ms` 从本次 stream 启动时刻开始计算。
   Interrupt lifecycle is explicit: asked events (`permission.asked` /
   `question.asked`) are mapped to
   `TaskStatusUpdateEvent(final=false, state=input-required)` with

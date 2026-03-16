@@ -266,6 +266,8 @@ def build_streaming_extension_params() -> dict[str, Any]:
             "event_id": f"{SHARED_STREAM_METADATA_FIELD}.event_id",
             "sequence": f"{SHARED_STREAM_METADATA_FIELD}.sequence",
             "role": f"{SHARED_STREAM_METADATA_FIELD}.role",
+            "idle": f"{SHARED_STREAM_METADATA_FIELD}.idle",
+            "since_last_chunk_ms": f"{SHARED_STREAM_METADATA_FIELD}.since_last_chunk_ms",
         },
         "interrupt_fields": {
             "request_id": f"{SHARED_INTERRUPT_METADATA_FIELD}.request_id",
