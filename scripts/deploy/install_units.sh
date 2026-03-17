@@ -59,5 +59,3 @@ ReadOnlyPaths=/usr/bin/gh
 [Install]
 WantedBy=multi-user.target
 UNIT
-
-sudo rm -f "${UNIT_DIR}/codex@.service"
