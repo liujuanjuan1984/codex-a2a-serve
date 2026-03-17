@@ -37,7 +37,7 @@ infrastructure rather than local-only tools:
 - session continuation and session query extensions
 - interrupt lifecycle mapping and callback validation
 - bearer-token auth, payload logging controls, and secret-handling guardrails
-- systemd multi-instance deployment and lightweight local deployment
+- systemd multi-instance deployment and released-CLI startup paths
 
 ## Logical Components
 
@@ -70,8 +70,8 @@ deployments:
 - streaming contracts are normalized around shared metadata
 - interrupt ask/resolve lifecycle is surfaced explicitly
 - session continuity is available through shared metadata and JSON-RPC queries
-- deployment scripts cover both long-running systemd instances and lightweight
-  current-user startup
+- deployment guidance now separates source development, released-CLI self-start,
+  and long-running systemd instances
 - security baseline now includes `SECURITY.md`, secret scanning, and safer
   deployment defaults
 

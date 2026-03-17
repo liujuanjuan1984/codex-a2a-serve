@@ -158,8 +158,6 @@ Common CLI keys:
 - `codex_model_id`
 - `codex_timeout`
 - `codex_timeout_stream`
-- `repo_url`
-- `repo_branch`
 - `package_spec`
 - `git_identity_name`
 - `git_identity_email`
@@ -167,10 +165,16 @@ Common CLI keys:
 - `update_a2a`
 - `force_restart`
 
+Optional workspace bootstrap keys:
+
+- `repo_url`
+- `repo_branch`
+
 Notes:
 
-- `repo_url` / `repo_branch` apply to the project workspace checkout, not to
-  the `codex-a2a-server` service itself.
+- `repo_url` / `repo_branch` are only for optionally cloning a project
+  repository into the instance workspace. They do not control how
+  `codex-a2a-server` itself is installed or updated.
 - `package_spec` controls which published package spec is installed into the
   shared runtime when `update_a2a=true`.
 - runtime install precedence is `package_spec=<spec>` CLI override, then
