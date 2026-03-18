@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
@@ -41,6 +42,13 @@ from .extension_contracts import (
     build_streaming_extension_params,
 )
 from .jsonrpc_ext import CodexSessionQueryJSONRPCApplication
+from .logging_context import (
+    CORRELATION_ID_HEADER,
+    install_log_record_factory,
+    reset_correlation_id,
+    resolve_correlation_id,
+    set_correlation_id,
+)
 from .openapi_contracts import patch_openapi_contract
 from .request_handler import CodexRequestHandler
 
@@ -75,6 +83,9 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
         identity = getattr(request.state, "user_identity", None)
         if identity:
             context.state["identity"] = identity
+        correlation_id = getattr(request.state, "correlation_id", None)
+        if isinstance(correlation_id, str) and correlation_id:
+            context.state["correlation_id"] = correlation_id
 
         return context
 
@@ -320,6 +331,7 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
 
 
 def create_app(settings: Settings) -> FastAPI:
+    install_log_record_factory()
     client = CodexClient(settings)
     executor = CodexAgentExecutor(
         client,
@@ -581,6 +593,38 @@ def create_app(settings: Settings) -> FastAPI:
         return response
 
     add_auth_middleware(app, settings)
+
+    @app.middleware("http")
+    async def correlation_id_middleware(request: Request, call_next):
+        correlation_id = resolve_correlation_id(request.headers.get("x-request-id"))
+        request.state.correlation_id = correlation_id
+        token = set_correlation_id(correlation_id)
+        started_at = time.perf_counter()
+        path = request.url.path
+        logger.info("A2A request started method=%s path=%s", request.method, path)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception(
+                "A2A request failed method=%s path=%s duration_ms=%.2f",
+                request.method,
+                path,
+                (time.perf_counter() - started_at) * 1000.0,
+            )
+            raise
+        try:
+            response.headers[CORRELATION_ID_HEADER] = correlation_id
+            logger.info(
+                "A2A request completed method=%s path=%s status=%s duration_ms=%.2f",
+                request.method,
+                path,
+                response.status_code,
+                (time.perf_counter() - started_at) * 1000.0,
+            )
+            return response
+        finally:
+            reset_correlation_id(token)
+
     patch_openapi_contract(
         app,
         deployment_context=deployment_context,
@@ -601,7 +645,9 @@ def _normalize_log_level(value: str) -> str:
 def _configure_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        format=(
+            "%(asctime)s %(levelname)s %(name)s [correlation_id=%(correlation_id)s]: %(message)s"
+        ),
     )
     logging.getLogger("uvicorn.error").setLevel(level)
     logging.getLogger("uvicorn.access").setLevel(level)

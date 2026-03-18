@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 import httpx
 import pytest
@@ -433,3 +434,87 @@ async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) ->
         for record in caplog.records
     )
     assert oversized_text not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_request_logs_reuse_supplied_correlation_id(monkeypatch, caplog) -> None:
+    import codex_a2a_server.app as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {
+        "Authorization": "Bearer test-token",
+        "X-Request-Id": "corr-user-supplied",
+    }
+
+    with caplog.at_level(logging.DEBUG):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/message:send",
+                headers=headers,
+                json=_rest_message_payload(),
+            )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-Id"] == "corr-user-supplied"
+
+    relevant = [
+        record
+        for record in caplog.records
+        if record.name
+        in {
+            "codex_a2a_server.app",
+            "codex_a2a_server.request_handler",
+            "codex_a2a_server.agent",
+        }
+    ]
+    assert relevant
+    assert any("A2A request started" in record.message for record in relevant)
+    assert any("A2A request completed" in record.message for record in relevant)
+    assert any("A2A message request started" in record.message for record in relevant)
+    assert any("Received message identity=" in record.message for record in relevant)
+    assert {record.correlation_id for record in relevant} == {"corr-user-supplied"}
+
+
+@pytest.mark.asyncio
+async def test_request_logs_generate_correlation_id_for_stream_requests(
+    monkeypatch,
+    caplog,
+) -> None:
+    import codex_a2a_server.app as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    with caplog.at_level(logging.DEBUG):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            async with client.stream(
+                "POST",
+                "/v1/message:stream",
+                headers=headers,
+                json=_rest_message_payload(),
+            ) as response:
+                assert response.status_code == 200
+                generated = response.headers["X-Request-Id"]
+                uuid.UUID(generated)
+                async for _chunk in response.aiter_bytes():
+                    break
+
+    relevant = [
+        record
+        for record in caplog.records
+        if record.name
+        in {
+            "codex_a2a_server.app",
+            "codex_a2a_server.request_handler",
+            "codex_a2a_server.streaming",
+        }
+    ]
+    assert relevant
+    assert any("A2A request started" in record.message for record in relevant)
+    assert any("A2A stream request started" in record.message for record in relevant)
+    assert any("Codex event stream started" in record.message for record in relevant)
+    assert {record.correlation_id for record in relevant} == {generated}

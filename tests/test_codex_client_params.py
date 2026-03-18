@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 from unittest.mock import MagicMock
 
@@ -9,7 +10,9 @@ from codex_a2a_server.codex_client import (
     CodexClient,
     InterruptRequestBinding,
     _PendingInterruptRequest,
+    _PendingRpcRequest,
 )
+from codex_a2a_server.logging_context import bind_correlation_id
 from tests.helpers import (
     make_settings,
     replay_codex_jsonrpc_line_fixture,
@@ -748,3 +751,27 @@ async def test_read_stdout_loop_handles_very_long_json_line() -> None:
     assert len(seen) == 1
     assert seen[0]["method"] == "event/test"
     assert seen[0]["params"]["blob"] == "x" * 200_000
+
+
+@pytest.mark.asyncio
+async def test_dispatch_message_logs_with_pending_request_correlation_id(caplog) -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[object] = loop.create_future()
+    client._pending_requests["7"] = _PendingRpcRequest(
+        request_id="7",
+        method="thread/list",
+        future=future,
+        correlation_id="corr-rpc-7",
+    )
+
+    with bind_correlation_id(None):
+        with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.codex_client"):
+            await client._dispatch_message({"id": 7, "result": {"data": []}})
+
+    assert future.result() == {"data": []}
+    assert any(
+        record.message == "codex rpc response method=thread/list request_id=7"
+        and record.correlation_id == "corr-rpc-7"
+        for record in caplog.records
+    )

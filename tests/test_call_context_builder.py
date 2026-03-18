@@ -20,6 +20,7 @@ def _request(path: str, *, raw_path: bytes | None = None) -> Request:
     }
     req = Request(scope)
     req.state.user_identity = "opaque:test-id"
+    req.state.correlation_id = "corr-123"
     return req
 
 
@@ -27,6 +28,7 @@ def test_builder_sets_identity_for_non_stream_request():
     builder = IdentityAwareCallContextBuilder()
     context = builder.build(_request("/"))
     assert context.state.get("identity") == "opaque:test-id"
+    assert context.state.get("correlation_id") == "corr-123"
     assert context.state.get("a2a_streaming_request") is None
 
 
