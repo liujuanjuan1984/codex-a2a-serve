@@ -28,6 +28,8 @@ from .tool_call_payloads import (
     tool_call_state_payload_from_part,
 )
 
+logger = logging.getLogger(__name__)
+
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
 _INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
 _STREAM_COMPLETION_DRAIN_SECONDS = 0.05
@@ -268,7 +270,6 @@ async def consume_codex_stream(
     event_queue: EventQueue,
     stop_event: asyncio.Event,
     completion_event: asyncio.Event,
-    logger: logging.Logger,
     directory: str | None = None,
 ) -> None:
     part_states: dict[str, StreamPartState] = {}
@@ -276,6 +277,7 @@ async def consume_codex_stream(
     buffered_text_chunk: BufferedTextChunk | None = None
     backoff = 0.5
     max_backoff = 5.0
+    logger.debug("Codex event stream started task_id=%s session_id=%s", task_id, session_id)
 
     async def emit_chunk_now(chunk: NormalizedStreamChunk) -> None:
         resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
@@ -802,13 +804,21 @@ async def consume_codex_stream(
             except Exception:
                 if stop_event.is_set():
                     break
-                logger.exception("Codex event stream failed; retrying")
+                logger.exception(
+                    "Codex event stream failed; retrying "
+                    "task_id=%s session_id=%s backoff_seconds=%.1f",
+                    task_id,
+                    session_id,
+                    backoff,
+                )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
             finally:
                 await flush_buffered_text_chunk()
     except Exception:
-        logger.exception("Codex event stream failed")
+        logger.exception("Codex event stream failed task_id=%s session_id=%s", task_id, session_id)
+    finally:
+        logger.debug("Codex event stream closed task_id=%s session_id=%s", task_id, session_id)
 
 
 def normalize_role(role: Any) -> str | None:

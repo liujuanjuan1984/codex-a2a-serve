@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import Settings
+from .logging_context import bind_correlation_id, get_correlation_id, install_log_record_factory
 from .tool_call_payloads import (
     as_tool_call_payload,
     tool_call_output_delta_payload_from_notification,
@@ -211,6 +212,14 @@ class _PendingInterruptRequest:
 
 
 @dataclass
+class _PendingRpcRequest:
+    request_id: str
+    method: str
+    future: asyncio.Future[Any]
+    correlation_id: str | None
+
+
+@dataclass
 class _TurnTracker:
     thread_id: str
     turn_id: str
@@ -229,6 +238,7 @@ class CodexClient:
     """Codex app-server client adapter (stdio JSON-RPC)."""
 
     def __init__(self, settings: Settings) -> None:
+        install_log_record_factory()
         self._settings = settings
         self._directory = settings.codex_directory
         self._model_id = settings.codex_model_id
@@ -252,7 +262,7 @@ class CodexClient:
 
         self._initialized = False
         self._next_request_id = 1
-        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
+        self._pending_requests: dict[str, _PendingRpcRequest] = {}
         self._pending_server_requests: dict[str, _PendingInterruptRequest] = {}
         self._event_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self._turn_trackers: dict[tuple[str, str], _TurnTracker] = {}
@@ -269,9 +279,9 @@ class CodexClient:
         self._stdout_task = None
         self._stderr_task = None
 
-        for future in self._pending_requests.values():
-            if not future.done():
-                future.set_exception(RuntimeError("codex app-server closed"))
+        for pending in self._pending_requests.values():
+            if not pending.future.done():
+                pending.future.set_exception(RuntimeError("codex app-server closed"))
         self._pending_requests.clear()
 
         if process:
@@ -406,9 +416,9 @@ class CodexClient:
             logger.exception("codex app-server stdout loop failed")
         finally:
             # Fail in-flight RPC futures if the process exits unexpectedly.
-            for future in self._pending_requests.values():
-                if not future.done():
-                    future.set_exception(RuntimeError("codex app-server stdout closed"))
+            for pending in self._pending_requests.values():
+                if not pending.future.done():
+                    pending.future.set_exception(RuntimeError("codex app-server stdout closed"))
             self._pending_requests.clear()
 
     async def _read_stderr_loop(self) -> None:
@@ -451,16 +461,30 @@ class CodexClient:
         # 1) Server response to a client request.
         if "id" in message and ("result" in message or "error" in message):
             key = str(message["id"])
-            future = self._pending_requests.pop(key, None)
-            if not future:
+            pending = self._pending_requests.pop(key, None)
+            if not pending:
                 return
-            if "error" in message:
-                err = message["error"] if isinstance(message["error"], dict) else {}
-                code = int(err.get("code", -32000))
-                text = str(err.get("message", "unknown codex rpc error"))
-                future.set_exception(CodexRPCError(code=code, message=text, data=err.get("data")))
-            else:
-                future.set_result(message.get("result"))
+            with bind_correlation_id(pending.correlation_id):
+                if "error" in message:
+                    err = message["error"] if isinstance(message["error"], dict) else {}
+                    code = int(err.get("code", -32000))
+                    text = str(err.get("message", "unknown codex rpc error"))
+                    logger.warning(
+                        "codex rpc error method=%s request_id=%s code=%s",
+                        pending.method,
+                        pending.request_id,
+                        code,
+                    )
+                    pending.future.set_exception(
+                        CodexRPCError(code=code, message=text, data=err.get("data"))
+                    )
+                else:
+                    logger.debug(
+                        "codex rpc response method=%s request_id=%s",
+                        pending.method,
+                        pending.request_id,
+                    )
+                    pending.future.set_result(message.get("result"))
             return
 
         # 2) Server-initiated request (contains id + method).
@@ -496,15 +520,26 @@ class CodexClient:
         self._next_request_id += 1
         loop = asyncio.get_running_loop()
         future: asyncio.Future[Any] = loop.create_future()
-        self._pending_requests[request_id] = future
+        correlation_id = get_correlation_id()
+        self._pending_requests[request_id] = _PendingRpcRequest(
+            request_id=request_id,
+            method=method,
+            future=future,
+            correlation_id=correlation_id,
+        )
         payload: dict[str, Any] = {"id": int(request_id), "method": method}
         if params is not None:
             payload["params"] = params
+        logger.debug("codex rpc request method=%s request_id=%s", method, request_id)
         await self._send_json_message(payload)
         try:
             return await asyncio.wait_for(future, timeout=self._request_timeout)
         except TimeoutError as exc:
-            self._pending_requests.pop(request_id, None)
+            pending = self._pending_requests.pop(request_id, None)
+            with bind_correlation_id(correlation_id):
+                logger.warning("codex rpc timeout method=%s request_id=%s", method, request_id)
+            if pending is not None and not pending.future.done():
+                pending.future.cancel()
             raise RuntimeError(f"codex rpc timeout: {method}") from exc
 
     async def _enqueue_stream_event(self, event: dict[str, Any]) -> None:

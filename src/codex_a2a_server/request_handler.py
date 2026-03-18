@@ -71,8 +71,10 @@ class CodexRequestHandler(DefaultRequestHandler):
             result_aggregator,
             producer_task,
         ) = await self._setup_message_execution(params, context)
+        logger.debug("A2A stream request started task_id=%s", task_id)
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
+        stream_completed = False
 
         try:
             async for event in result_aggregator.consume_and_emit(consumer):
@@ -80,12 +82,18 @@ class CodexRequestHandler(DefaultRequestHandler):
                     self._validate_task_id_match(task_id, event.id)
                 await self._send_push_notification_if_needed(task_id, result_aggregator)
                 yield event
+            stream_completed = True
         except (asyncio.CancelledError, GeneratorExit):
             logger.warning("Client disconnected. Cancelling producer task %s", task_id)
             producer_task.cancel()
             await queue.close(immediate=True)
             raise
         finally:
+            logger.debug(
+                "A2A stream request closed task_id=%s completed=%s",
+                task_id,
+                stream_completed,
+            )
             cleanup_task = asyncio.create_task(self._cleanup_producer(producer_task, task_id))
             cleanup_task.set_name(f"cleanup_producer:{task_id}")
             self._track_background_task(cleanup_task)
@@ -99,6 +107,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             producer_task,
         ) = await self._setup_message_execution(params, context)
 
+        logger.debug("A2A message request started task_id=%s", task_id)
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
 
@@ -152,5 +161,6 @@ class CodexRequestHandler(DefaultRequestHandler):
                 result = apply_history_length(result, params.configuration.history_length)
 
         await self._send_push_notification_if_needed(task_id, result_aggregator)
+        logger.debug("A2A message request completed task_id=%s blocking=%s", task_id, blocking)
 
         return result

@@ -289,7 +289,6 @@ class CodexAgentExecutor(AgentExecutor):
                         event_queue=event_queue,
                         stop_event=stop_event,
                         completion_event=stream_completion_event,
-                        logger=logger,
                         directory=directory,
                     )
                 )
