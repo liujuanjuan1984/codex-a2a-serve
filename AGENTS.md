@@ -42,6 +42,8 @@
 - Before creating or updating a PR, confirm the relevant local validation has passed so CI is not left to catch issues that are already reproducible locally.
 - `pre-commit` 若自动修复文件（如 `ruff --fix`），需复查改动后再提交。
 - If `pre-commit` modifies files, include those changes in the same commit and rerun `uv run pre-commit run --all-files` until it completes without further rewrites.
+- After running `pre-commit`, inspect `git status --short` before committing or pushing; do not assume hook-made rewrites are already included in the pending commit.
+- Do not push or update a PR while the working tree still contains hook-generated edits from the latest `pre-commit` run.
 - Shell/部署脚本改动：在基线之外，至少执行 `bash -n` 对改动脚本做语法校验。
 - 文档-only 改动：可不跑测试，但应自检命令与路径示例可用。
 - `uv sync --all-extras` 仅在首次初始化或依赖变更时需要，不作为每次改动必做项。
