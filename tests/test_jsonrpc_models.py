@@ -81,6 +81,7 @@ def test_parse_permission_reply_params_rejects_missing_reply() -> None:
 
     assert str(exc_info.value) == "reply must be a string"
     assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "reply"}
+    assert "fields" not in exc_info.value.data
 
 
 def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
@@ -89,6 +90,7 @@ def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
 
     assert str(exc_info.value) == "limit must be an integer"
     assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "limit"}
+    assert "fields" not in exc_info.value.data
 
 
 def test_parse_get_session_messages_params_returns_session_and_query() -> None:
@@ -102,3 +104,33 @@ def test_parse_get_session_messages_params_returns_session_and_query() -> None:
 
     assert session_id == "s-1"
     assert query == {"tag": "ops", "limit": 3}
+
+
+def test_parse_prompt_async_params_only_uses_fields_for_unsupported_fields() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as unsupported_exc:
+        parse_prompt_async_params(
+            {
+                "session_id": "s-1",
+                "request": {
+                    "parts": [{"type": "text", "text": "hello"}],
+                    "extra": True,
+                },
+            }
+        )
+
+    assert unsupported_exc.value.data["field"] == "request"
+    assert unsupported_exc.value.data["fields"] == ["request.extra"]
+
+    with pytest.raises(JsonRpcParamsValidationError) as invalid_type_exc:
+        parse_prompt_async_params(
+            {
+                "session_id": "s-1",
+                "request": {"parts": [{"type": "text", "text": 1}]},
+            }
+        )
+
+    assert invalid_type_exc.value.data == {
+        "type": "INVALID_FIELD",
+        "field": "request.parts[0].text",
+    }
+    assert "fields" not in invalid_type_exc.value.data

@@ -78,8 +78,9 @@ def _map_extra_forbidden(errors: list[dict[str, Any]]) -> JsonRpcParamsValidatio
             },
         )
     if fields and all(field.startswith("metadata.") for field in fields):
+        metadata_fields = ", ".join(field.removeprefix("metadata.") for field in fields)
         return JsonRpcParamsValidationError(
-            message=f"Unsupported metadata fields: {', '.join(field.removeprefix('metadata.') for field in fields)}",
+            message=f"Unsupported metadata fields: {metadata_fields}",
             data={
                 "type": "INVALID_FIELD",
                 "fields": fields,
@@ -196,7 +197,9 @@ class CommandRequestParams(_StrictModel):
     @field_validator("command", mode="before")
     @classmethod
     def _validate_command(cls, value: Any) -> str:
-        return _normalize_non_empty_string(value, message="request.command must be a non-empty string")
+        return _normalize_non_empty_string(
+            value, message="request.command must be a non-empty string"
+        )
 
     @field_validator("arguments", "message_id", mode="before")
     @classmethod
@@ -210,7 +213,9 @@ class ShellRequestParams(_StrictModel):
     @field_validator("command", mode="before")
     @classmethod
     def _validate_command(cls, value: Any) -> str:
-        return _normalize_non_empty_string(value, message="request.command must be a non-empty string")
+        return _normalize_non_empty_string(
+            value, message="request.command must be a non-empty string"
+        )
 
 
 class PromptAsyncControlParams(_StrictModel):
@@ -492,7 +497,9 @@ def parse_list_sessions_params(params: dict[str, Any]) -> dict[str, Any]:
             },
         )
     if query_model and (
-        query_model.cursor is not None or query_model.page is not None or query_model.size is not None
+        query_model.cursor is not None
+        or query_model.page is not None
+        or query_model.size is not None
     ):
         raise JsonRpcParamsValidationError(
             message="Only limit pagination is supported",
@@ -537,7 +544,9 @@ def parse_get_session_messages_params(params: dict[str, Any]) -> tuple[str, dict
             },
         )
     if query_model and (
-        query_model.cursor is not None or query_model.page is not None or query_model.size is not None
+        query_model.cursor is not None
+        or query_model.page is not None
+        or query_model.size is not None
     ):
         raise JsonRpcParamsValidationError(
             message="Only limit pagination is supported",
