@@ -13,6 +13,7 @@ from .extension_contracts import (
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
+    build_wire_contract_extension_params,
 )
 
 
@@ -32,7 +33,9 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
         "plus Codex session extensions and shared interrupt callback methods.\n\n"
         f"Codex session query/control methods: {', '.join(session_methods)}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
-        "Notification semantics: extension requests without JSON-RPC id return HTTP 204."
+        "Notification semantics: extension requests without JSON-RPC id return HTTP 204. "
+        "Unsupported methods return JSON-RPC -32601 with supported_methods and "
+        "protocol_version in error.data."
     )
 
 
@@ -209,6 +212,10 @@ def patch_openapi_contract(
     interrupt_callback = build_interrupt_callback_extension_params(
         deployment_context=deployment_context,
     )
+    wire_contract = build_wire_contract_extension_params(
+        protocol_version=protocol_version,
+        session_shell_enabled=session_shell_enabled,
+    )
     compatibility_profile = build_compatibility_profile_params(
         protocol_version=protocol_version,
         session_shell_enabled=session_shell_enabled,
@@ -235,6 +242,7 @@ def patch_openapi_contract(
                         "streaming": streaming,
                         "session_query": session_query,
                         "interrupt_callback": interrupt_callback,
+                        "wire_contract": wire_contract,
                         "compatibility_profile": compatibility_profile,
                     }
 

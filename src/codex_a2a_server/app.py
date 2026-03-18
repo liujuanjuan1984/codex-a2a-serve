@@ -41,11 +41,14 @@ from .extension_contracts import (
     SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_METHODS,
     STREAMING_EXTENSION_URI,
+    WIRE_CONTRACT_EXTENSION_URI,
     build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
+    build_supported_jsonrpc_methods,
+    build_wire_contract_extension_params,
 )
 from .jsonrpc_ext import CodexSessionQueryJSONRPCApplication
 from .logging_context import (
@@ -124,8 +127,8 @@ def _build_agent_card_description(
         "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), "
         "shared session-binding and streaming contracts, Codex session-query "
-        "extensions, shared interrupt callback extensions, and a machine-readable "
-        "compatibility profile."
+        "extensions, shared interrupt callback extensions, a machine-readable "
+        "compatibility profile, and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
     parts.append(
@@ -170,6 +173,10 @@ def build_agent_card(settings: Settings) -> AgentCard:
     )
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
         deployment_context=deployment_context
+    )
+    wire_contract_extension_params = build_wire_contract_extension_params(
+        protocol_version=settings.a2a_protocol_version,
+        session_shell_enabled=settings.a2a_enable_session_shell,
     )
     compatibility_profile_params = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
@@ -262,6 +269,15 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "baseline, declared custom extensions, and retention policy."
                     ),
                     params=compatibility_profile_params,
+                ),
+                AgentExtension(
+                    uri=WIRE_CONTRACT_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Declare the current JSON-RPC/HTTP method boundary and the "
+                        "unsupported method error contract for generic A2A clients."
+                    ),
+                    params=wire_contract_extension_params,
                 ),
             ],
         ),
@@ -383,6 +399,10 @@ def create_app(settings: Settings) -> FastAPI:
         context_builder=context_builder,
         codex_client=client,
         methods=jsonrpc_methods,
+        protocol_version=settings.a2a_protocol_version,
+        supported_methods=build_supported_jsonrpc_methods(
+            session_shell_enabled=settings.a2a_enable_session_shell
+        ),
         directory_resolver=executor.resolve_directory,
         session_claim=executor.claim_session,
         session_claim_finalize=executor.finalize_session_claim,
