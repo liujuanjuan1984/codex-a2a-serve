@@ -1,8 +1,10 @@
 import asyncio
+import logging
 
 import pytest
 from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
+from codex_a2a_server import streaming as streaming_module
 from codex_a2a_server.agent import CodexAgentExecutor
 from codex_a2a_server.codex_client import CodexMessage
 from codex_a2a_server.streaming import (
@@ -1679,3 +1681,72 @@ async def test_streaming_keeps_multiple_message_ids_in_same_request_window() -> 
     message_ids = [_artifact_stream_meta(ev).get("message_id") for ev in updates]
     assert "msg-a" in message_ids
     assert "msg-b" in message_ids
+
+
+@pytest.mark.asyncio
+async def test_streaming_logs_idle_diagnostics_when_only_transport_keepalive_is_visible(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(streaming_module, "_STREAM_IDLE_DIAGNOSTIC_SECONDS", 0.01)
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _event(
+                session_id="ses-1",
+                role="assistant",
+                part_type="text",
+                part_id="prt-idle",
+                delta="late answer",
+            ),
+        ],
+        stream_event_delays=[0.03],
+        response_text="late answer",
+        send_delay=0.05,
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    caplog.set_level(logging.INFO, logger="codex_a2a_server.streaming")
+
+    await executor.execute(
+        make_request_context(task_id="task-idle-log", context_id="ctx-idle-log", text="go"),
+        queue,
+    )
+
+    idle_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "Codex event stream idle" in record.getMessage()
+    ]
+    assert idle_messages
+    assert any("completion_observed=False" in message for message in idle_messages)
+    assert any("last_visible_chunk_ms_ago=None" in message for message in idle_messages)
+
+
+@pytest.mark.asyncio
+async def test_streaming_logs_completion_observed_in_close_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[],
+        response_text="answer",
+        send_delay=0.0,
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    caplog.set_level(logging.INFO, logger="codex_a2a_server.streaming")
+
+    await executor.execute(
+        make_request_context(task_id="task-close-log", context_id="ctx-close-log", text="go"),
+        queue,
+    )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Codex event stream completion observed" in message for message in messages)
+    assert any(
+        "Codex event stream closed" in message and "completion_observed=True" in message
+        for message in messages
+    )
