@@ -94,12 +94,15 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
 
 def _build_deployment_context(settings: Settings) -> dict[str, str | bool | int]:
     context: dict[str, str | bool | int] = {
+        "deployment_profile": "single_tenant_shared_workspace",
         "allow_directory_override": settings.a2a_allow_directory_override,
         "health_endpoint_enabled": settings.a2a_enable_health_endpoint,
         "interrupt_request_ttl_seconds": settings.a2a_interrupt_request_ttl_seconds,
         "session_shell_enabled": settings.a2a_enable_session_shell,
+        "single_tenant": True,
         "shared_workspace_across_consumers": True,
         "streaming_enabled": True,
+        "tenant_isolation": "none",
     }
     if settings.a2a_project:
         context["project"] = settings.a2a_project
@@ -133,6 +136,7 @@ def _build_agent_card_description(
         "Within one codex-a2a-server instance, all consumers share the same "
         "underlying Codex workspace/environment."
     )
+    parts.append("This server profile is intended for single-tenant, self-hosted coding workflows.")
     project = deployment_context.get("project")
     if isinstance(project, str) and project.strip():
         parts.append(f"Deployment project: {project}.")

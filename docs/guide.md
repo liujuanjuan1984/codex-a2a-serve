@@ -71,13 +71,19 @@ The service publishes a machine-readable compatibility profile through Agent
 Card and OpenAPI metadata. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
-- which custom JSON-RPC methods are deployment extensions
+- which shared extensions are intended to be reused across this repo family
+- which Codex-specific JSON-RPC methods are product-specific extensions
 - which extension surfaces are required runtime metadata contracts
 - which methods are deployment-conditional rather than always available
 
 Current profile shape:
 
-- `profile_id=codex-a2a-core-plus-extensions-v1`
+- `profile_id=codex-a2a-single-tenant-coding-v1`
+- deployment profile:
+  - `id=single_tenant_shared_workspace`
+  - `single_tenant=true`
+  - `shared_workspace_across_consumers=true`
+  - `tenant_isolation=none`
 - core JSON-RPC methods:
   - `message/send`
   - `message/stream`
@@ -92,10 +98,16 @@ Current profile shape:
 Retention guidance:
 
 - Treat core methods as the generic client interoperability baseline.
+- Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for
   the current deployment model; they are not optional documentation-only hints.
-- Treat `codex.*` and `a2a.interrupt.*` JSON-RPC methods as declared custom
-  extensions that remain stable within the current major line.
+- Treat `urn:a2a:*` extension URIs in this repository as shared extension
+  conventions used across this repo family, not as claims that they are part
+  of the A2A core baseline.
+- Treat `a2a.interrupt.*` methods as shared extensions.
+- Treat `codex.*` methods and `metadata.codex.directory` as Codex-specific
+  extensions or provider-private operational surfaces rather than portable A2A
+  baseline capabilities.
 - Treat `codex.sessions.shell` as deployment-conditional. Discover it from the
   declared compatibility profile and extension contracts before calling it.
 

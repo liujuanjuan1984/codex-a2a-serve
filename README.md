@@ -80,6 +80,9 @@ deployments:
 This project improves the service boundary around Codex, but it is not a hard
 multi-tenant isolation layer.
 
+One deployed instance should be treated as a single-tenant trust boundary with
+a shared workspace/environment.
+
 - the underlying Codex runtime may still need provider credentials
 - one instance is not tenant-isolated by default
 - deploy scripts default to not persisting secrets unless explicitly opted in

@@ -39,6 +39,17 @@ The current major line treats these areas as stable service-facing contracts:
 Changes to those surfaces should be treated as compatibility-sensitive and
 should include corresponding test updates.
 
+## Deployment Profile
+
+The current service profile is intentionally:
+
+- single-tenant
+- shared-workspace
+- `tenant_isolation=none`
+
+One deployed instance should be treated as a single-tenant trust boundary, not
+as a secure multi-tenant runtime boundary.
+
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent
@@ -47,6 +58,24 @@ should include corresponding test updates.
   line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than
   silently disappearing.
+
+## Extension Taxonomy
+
+This repository distinguishes between three layers:
+
+- core A2A surface
+  - standard send / stream / task methods
+- shared extensions
+  - repo-family conventions such as session binding, stream hints, and
+    interrupt callbacks
+- Codex-specific extensions
+  - `codex.*` JSON-RPC methods and `metadata.codex.directory`
+
+Important note:
+
+- `urn:a2a:*` extension URIs used here should be read as shared conventions in
+  this repository family.
+- They are not a claim that those extensions are part of the A2A core baseline.
 
 ## Non-Goals
 

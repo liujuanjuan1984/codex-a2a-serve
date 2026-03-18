@@ -219,7 +219,7 @@ WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
     "supported_methods",
     "protocol_version",
 )
-COMPATIBILITY_PROFILE_ID = "codex-a2a-core-plus-extensions-v1"
+COMPATIBILITY_PROFILE_ID = "codex-a2a-single-tenant-coding-v1"
 
 
 def build_supported_jsonrpc_methods(*, session_shell_enabled: bool) -> list[str]:
@@ -363,17 +363,50 @@ def build_compatibility_profile_params(
     return {
         "profile_id": COMPATIBILITY_PROFILE_ID,
         "protocol_version": protocol_version,
+        "deployment_profile": {
+            "id": "single_tenant_shared_workspace",
+            "single_tenant": True,
+            "shared_workspace_across_consumers": True,
+            "tenant_isolation": "none",
+        },
         "core": {
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
             "http_endpoints": list(CORE_HTTP_ENDPOINTS),
         },
+        "extension_taxonomy": {
+            "shared_extensions": [
+                SESSION_BINDING_EXTENSION_URI,
+                STREAMING_EXTENSION_URI,
+                INTERRUPT_CALLBACK_EXTENSION_URI,
+            ],
+            "codex_extensions": [
+                SESSION_QUERY_EXTENSION_URI,
+                COMPATIBILITY_PROFILE_EXTENSION_URI,
+                WIRE_CONTRACT_EXTENSION_URI,
+            ],
+            "provider_private_metadata": ["codex.directory"],
+        },
         "extension_retention": extension_retention,
         "method_retention": method_retention,
         "consumer_guidance": [
-            ("Treat core A2A methods as the stable interoperability baseline for generic clients."),
+            "Treat core A2A methods as the stable interoperability baseline for generic clients.",
             (
-                "Treat codex.* and a2a.interrupt.* JSON-RPC methods as declared "
-                "custom extensions that remain stable within the current major line."
+                "Treat this deployment as a single-tenant, shared-workspace coding profile; "
+                "do not assume per-consumer workspace or tenant isolation."
+            ),
+            (
+                "Treat urn:a2a:* extension URIs in this repository as shared extension "
+                "conventions used across this repo family, not as claims that they are part "
+                "of the A2A core baseline."
+            ),
+            (
+                "Treat shared session-binding, stream-hints, and interrupt callback surfaces "
+                "as shared extensions rather than provider-private Codex capabilities."
+            ),
+            (
+                "Treat codex.* methods and codex.directory metadata as Codex-specific "
+                "extensions or provider-private operational surfaces rather than portable "
+                "A2A baseline capabilities."
             ),
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
