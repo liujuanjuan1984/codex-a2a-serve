@@ -51,6 +51,7 @@ def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
     )
     assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert session_query.params["pagination"]["behavior"] == "mixed"
 
 
 def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_disabled() -> None:
@@ -73,6 +74,7 @@ def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_dis
     )
     assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert session_query.params["pagination"]["behavior"] == "mixed"
 
 
 @pytest.mark.asyncio

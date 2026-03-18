@@ -375,6 +375,8 @@ This service exposes Codex session list and message-history queries via A2A JSON
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
   - limit pagination defaults to `20` items and rejects values above `100`
+  - pagination behavior is mixed: `codex.sessions.list` forwards `limit` upstream,
+    while `codex.sessions.messages.list` applies the limit locally
   - `codex.sessions.messages.list` enforces `limit` locally after mapping the
     upstream thread history into A2A messages
   - canonical session metadata is exposed at `metadata.shared.session`

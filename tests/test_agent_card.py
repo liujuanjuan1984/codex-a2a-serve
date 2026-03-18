@@ -94,6 +94,14 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
     assert session_query.params["pagination"]["mode"] == "limit"
     assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert session_query.params["pagination"]["behavior"] == "mixed"
+    assert session_query.params["pagination"]["by_method"] == {
+        "codex.sessions.list": "upstream_passthrough",
+        "codex.sessions.messages.list": "local_tail_slice",
+    }
+    assert any(
+        "forwards limit upstream" in note for note in session_query.params["pagination"]["notes"]
+    )
     assert (
         session_query.params["context_semantics"]["upstream_session_id_field"]
         == "metadata.shared.session.id"
