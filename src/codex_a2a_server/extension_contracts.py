@@ -37,33 +37,6 @@ class InterruptMethodContract:
     notification_response_status: int | None = None
 
 
-PROMPT_ASYNC_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("parts",)
-PROMPT_ASYNC_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = (
-    "messageID",
-    "agent",
-    "system",
-    "variant",
-)
-PROMPT_ASYNC_ALLOWED_FIELDS: tuple[str, ...] = (
-    *PROMPT_ASYNC_REQUEST_REQUIRED_FIELDS,
-    *PROMPT_ASYNC_REQUEST_OPTIONAL_FIELDS,
-)
-COMMAND_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("command",)
-COMMAND_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = (
-    "arguments",
-    "messageID",
-)
-COMMAND_ALLOWED_FIELDS: tuple[str, ...] = (
-    *COMMAND_REQUEST_REQUIRED_FIELDS,
-    *COMMAND_REQUEST_OPTIONAL_FIELDS,
-)
-SHELL_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("command",)
-SHELL_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = ()
-SHELL_ALLOWED_FIELDS: tuple[str, ...] = (
-    *SHELL_REQUEST_REQUIRED_FIELDS,
-    *SHELL_REQUEST_OPTIONAL_FIELDS,
-)
-
 SESSION_QUERY_PAGINATION_MODE = "limit"
 SESSION_QUERY_PAGINATION_BEHAVIOR = "passthrough"
 SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit",)
