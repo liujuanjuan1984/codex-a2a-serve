@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Any
 
 from a2a.server.events.event_queue import EventQueue
@@ -55,6 +56,7 @@ logger = logging.getLogger(__name__)
 metrics = get_metrics_registry()
 
 _STREAM_COMPLETION_DRAIN_SECONDS = 0.05
+_STREAM_IDLE_DIAGNOSTIC_SECONDS = 15.0
 __all__ = [
     "BlockType",
     "StreamOutputState",
@@ -66,6 +68,46 @@ __all__ = [
     "extract_stream_part_id",
     "extract_stream_session_id",
 ]
+
+
+@dataclass
+class StreamDiagnostics:
+    started_at: float
+    last_upstream_event_at: float | None = None
+    last_visible_chunk_at: float | None = None
+    completion_observed: bool = False
+    emitted_chunk_count: int = 0
+    suppressed_chunk_count: int = 0
+    idle_log_count: int = 0
+    last_idle_log_at: float | None = None
+
+    def snapshot(self, *, now: float, stream_open: bool) -> dict[str, Any]:
+        return {
+            "stream_open": stream_open,
+            "completion_observed": self.completion_observed,
+            "emitted_chunk_count": self.emitted_chunk_count,
+            "suppressed_chunk_count": self.suppressed_chunk_count,
+            "started_ms_ago": int(max(0.0, now - self.started_at) * 1000),
+            "last_upstream_event_ms_ago": (
+                None
+                if self.last_upstream_event_at is None
+                else int(max(0.0, now - self.last_upstream_event_at) * 1000)
+            ),
+            "last_visible_chunk_ms_ago": (
+                None
+                if self.last_visible_chunk_at is None
+                else int(max(0.0, now - self.last_visible_chunk_at) * 1000)
+            ),
+        }
+
+    def should_log_idle(self, *, now: float) -> bool:
+        threshold_base = self.last_idle_log_at or self.started_at
+        if now - threshold_base < _STREAM_IDLE_DIAGNOSTIC_SECONDS:
+            return False
+        return (
+            self.last_visible_chunk_at is None
+            or (now - self.last_visible_chunk_at) >= _STREAM_IDLE_DIAGNOSTIC_SECONDS
+        )
 
 
 async def consume_codex_stream(
@@ -86,7 +128,34 @@ async def consume_codex_stream(
     buffered_text_chunk: BufferedTextChunk | None = None
     backoff = 0.5
     max_backoff = 5.0
-    logger.debug("Codex event stream started task_id=%s session_id=%s", task_id, session_id)
+    diagnostics = StreamDiagnostics(started_at=time.monotonic())
+    logger.info(
+        "Codex event stream started task_id=%s session_id=%s idle_diagnostic_seconds=%.1f",
+        task_id,
+        session_id,
+        _STREAM_IDLE_DIAGNOSTIC_SECONDS,
+    )
+
+    def maybe_log_idle(*, now: float) -> None:
+        if not diagnostics.should_log_idle(now=now):
+            return
+        diagnostics.last_idle_log_at = now
+        diagnostics.idle_log_count += 1
+        snapshot = diagnostics.snapshot(now=now, stream_open=not completion_event.is_set())
+        logger.info(
+            "Codex event stream idle task_id=%s session_id=%s completion_observed=%s "
+            "emitted_chunk_count=%s suppressed_chunk_count=%s started_ms_ago=%s "
+            "last_upstream_event_ms_ago=%s last_visible_chunk_ms_ago=%s idle_log_count=%s",
+            task_id,
+            session_id,
+            snapshot["completion_observed"],
+            snapshot["emitted_chunk_count"],
+            snapshot["suppressed_chunk_count"],
+            snapshot["started_ms_ago"],
+            snapshot["last_upstream_event_ms_ago"],
+            snapshot["last_visible_chunk_ms_ago"],
+            diagnostics.idle_log_count,
+        )
 
     async def emit_chunk_now(chunk: NormalizedStreamChunk) -> None:
         resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
@@ -95,6 +164,7 @@ async def consume_codex_stream(
             block_type=chunk.block_type,
             role=chunk.role,
         ):
+            diagnostics.suppressed_chunk_count += 1
             return
         should_emit, effective_append = stream_state.register_chunk(
             block_type=chunk.block_type,
@@ -102,6 +172,7 @@ async def consume_codex_stream(
             append=chunk.append,
         )
         if not should_emit:
+            diagnostics.suppressed_chunk_count += 1
             return
         sequence = stream_state.next_sequence()
         await enqueue_artifact_update(
@@ -121,6 +192,8 @@ async def consume_codex_stream(
                 event_id=stream_state.build_event_id(sequence),
             ),
         )
+        diagnostics.emitted_chunk_count += 1
+        diagnostics.last_visible_chunk_at = time.monotonic()
         if chunk.block_type == BlockType.TOOL_CALL:
             metrics.inc_counter(TOOL_CALL_CHUNKS_EMITTED_TOTAL)
         logger.debug(
@@ -140,6 +213,12 @@ async def consume_codex_stream(
             flush_time_limit(buffered_text_chunk.block_type)
             - (time.monotonic() - buffered_text_chunk.started_at),
         )
+
+    def seconds_until_idle_diagnostic() -> float | None:
+        if completion_event.is_set():
+            return None
+        threshold_base = diagnostics.last_idle_log_at or diagnostics.started_at
+        return max(0.0, _STREAM_IDLE_DIAGNOSTIC_SECONDS - (time.monotonic() - threshold_base))
 
     async def flush_buffered_text_chunk() -> None:
         nonlocal buffered_text_chunk
@@ -226,6 +305,13 @@ async def consume_codex_stream(
                     if pending_event_task is None:
                         pending_event_task = asyncio.create_task(anext(stream_iter))
                     wait_timeout = seconds_until_buffer_flush()
+                    idle_timeout = seconds_until_idle_diagnostic()
+                    if idle_timeout is not None:
+                        wait_timeout = (
+                            idle_timeout
+                            if wait_timeout is None
+                            else min(wait_timeout, idle_timeout)
+                        )
                     if completion_event.is_set():
                         if wait_timeout is None:
                             wait_timeout = _STREAM_COMPLETION_DRAIN_SECONDS
@@ -238,6 +324,17 @@ async def consume_codex_stream(
                     )
                     if pending_event_task not in done:
                         if completion_event.is_set():
+                            if not diagnostics.completion_observed:
+                                diagnostics.completion_observed = True
+                                logger.info(
+                                    "Codex event stream completion observed "
+                                    "task_id=%s session_id=%s emitted_chunk_count=%s "
+                                    "suppressed_chunk_count=%s",
+                                    task_id,
+                                    session_id,
+                                    diagnostics.emitted_chunk_count,
+                                    diagnostics.suppressed_chunk_count,
+                                )
                             await flush_buffered_text_chunk()
                             pending_event_task.cancel()
                             with suppress(asyncio.CancelledError):
@@ -245,6 +342,7 @@ async def consume_codex_stream(
                             pending_event_task = None
                             break
                         await flush_buffered_text_chunk()
+                        maybe_log_idle(now=time.monotonic())
                         continue
                     try:
                         event = pending_event_task.result()
@@ -255,11 +353,14 @@ async def consume_codex_stream(
                         pending_event_task = None
                     if stop_event.is_set():
                         break
+                    diagnostics.last_upstream_event_at = time.monotonic()
                     event_type = event.get("type")
                     if not isinstance(event_type, str):
+                        maybe_log_idle(now=time.monotonic())
                         continue
                     props = event.get("properties")
                     if not isinstance(props, Mapping):
+                        maybe_log_idle(now=time.monotonic())
                         continue
                     event_session_id = extract_event_session_id(event)
                     if event_session_id == session_id:
@@ -289,6 +390,7 @@ async def consume_codex_stream(
                                     phase="resolved",
                                     resolution=resolved["resolution"],
                                 )
+                    maybe_log_idle(now=time.monotonic())
                     if event_type not in {"message.part.updated", "message.part.delta"}:
                         continue
                     part = props.get("part")
@@ -423,6 +525,7 @@ async def consume_codex_stream(
 
                     if chunks:
                         await emit_chunks(chunks)
+                    maybe_log_idle(now=time.monotonic())
 
                 break
             except Exception:
@@ -443,4 +546,28 @@ async def consume_codex_stream(
     except Exception:
         logger.exception("Codex event stream failed task_id=%s session_id=%s", task_id, session_id)
     finally:
-        logger.debug("Codex event stream closed task_id=%s session_id=%s", task_id, session_id)
+        if completion_event.is_set() and not diagnostics.completion_observed:
+            diagnostics.completion_observed = True
+            logger.info(
+                "Codex event stream completion observed "
+                "task_id=%s session_id=%s emitted_chunk_count=%s suppressed_chunk_count=%s",
+                task_id,
+                session_id,
+                diagnostics.emitted_chunk_count,
+                diagnostics.suppressed_chunk_count,
+            )
+        snapshot = diagnostics.snapshot(now=time.monotonic(), stream_open=False)
+        logger.info(
+            "Codex event stream closed task_id=%s session_id=%s completion_observed=%s "
+            "emitted_chunk_count=%s suppressed_chunk_count=%s started_ms_ago=%s "
+            "last_upstream_event_ms_ago=%s last_visible_chunk_ms_ago=%s idle_log_count=%s",
+            task_id,
+            session_id,
+            snapshot["completion_observed"],
+            snapshot["emitted_chunk_count"],
+            snapshot["suppressed_chunk_count"],
+            snapshot["started_ms_ago"],
+            snapshot["last_upstream_event_ms_ago"],
+            snapshot["last_visible_chunk_ms_ago"],
+            diagnostics.idle_log_count,
+        )
