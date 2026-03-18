@@ -214,6 +214,12 @@ async def consume_codex_stream(
             - (time.monotonic() - buffered_text_chunk.started_at),
         )
 
+    def seconds_until_idle_diagnostic() -> float | None:
+        if completion_event.is_set():
+            return None
+        threshold_base = diagnostics.last_idle_log_at or diagnostics.started_at
+        return max(0.0, _STREAM_IDLE_DIAGNOSTIC_SECONDS - (time.monotonic() - threshold_base))
+
     async def flush_buffered_text_chunk() -> None:
         nonlocal buffered_text_chunk
         if buffered_text_chunk is None:
@@ -299,6 +305,13 @@ async def consume_codex_stream(
                     if pending_event_task is None:
                         pending_event_task = asyncio.create_task(anext(stream_iter))
                     wait_timeout = seconds_until_buffer_flush()
+                    idle_timeout = seconds_until_idle_diagnostic()
+                    if idle_timeout is not None:
+                        wait_timeout = (
+                            idle_timeout
+                            if wait_timeout is None
+                            else min(wait_timeout, idle_timeout)
+                        )
                     if completion_event.is_set():
                         if wait_timeout is None:
                             wait_timeout = _STREAM_COMPLETION_DRAIN_SECONDS

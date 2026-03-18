@@ -1726,10 +1726,21 @@ async def test_streaming_logs_idle_diagnostics_when_only_transport_keepalive_is_
 
 @pytest.mark.asyncio
 async def test_streaming_logs_completion_observed_in_close_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    monkeypatch.setattr(streaming_module, "_STREAM_IDLE_DIAGNOSTIC_SECONDS", 0.01)
     client = DummyStreamingClient(
-        stream_events_payload=[],
+        stream_events_payload=[
+            _event(
+                session_id="ses-1",
+                role="assistant",
+                part_type="text",
+                part_id="prt-completion-log",
+                delta="late chunk",
+            ),
+        ],
+        stream_event_delays=[0.2],
         response_text="answer",
         send_delay=0.0,
     )
