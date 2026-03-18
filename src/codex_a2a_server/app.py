@@ -19,10 +19,7 @@ from a2a.types import (
     AgentExtension,
     AgentInterface,
     AgentSkill,
-    AuthorizationCodeOAuthFlow,
     HTTPAuthSecurityScheme,
-    OAuth2SecurityScheme,
-    OAuthFlows,
     SecurityScheme,
     TransportProtocol,
 )
@@ -97,12 +94,15 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
 
 def _build_deployment_context(settings: Settings) -> dict[str, str | bool | int]:
     context: dict[str, str | bool | int] = {
+        "deployment_profile": "single_tenant_shared_workspace",
         "allow_directory_override": settings.a2a_allow_directory_override,
         "health_endpoint_enabled": settings.a2a_enable_health_endpoint,
         "interrupt_request_ttl_seconds": settings.a2a_interrupt_request_ttl_seconds,
         "session_shell_enabled": settings.a2a_enable_session_shell,
+        "single_tenant": True,
         "shared_workspace_across_consumers": True,
-        "streaming_enabled": settings.a2a_streaming,
+        "streaming_enabled": True,
+        "tenant_isolation": "none",
     }
     if settings.a2a_project:
         context["project"] = settings.a2a_project
@@ -136,6 +136,7 @@ def _build_agent_card_description(
         "Within one codex-a2a-server instance, all consumers share the same "
         "underlying Codex workspace/environment."
     )
+    parts.append("This server profile is intended for single-tenant, self-hosted coding workflows.")
     project = deployment_context.get("project")
     if isinstance(project, str) and project.strip():
         parts.append(f"Deployment project: {project}.")
@@ -194,22 +195,6 @@ def build_agent_card(settings: Settings) -> AgentCard:
     }
     security: list[dict[str, list[str]]] = [{"bearerAuth": []}]
 
-    if settings.a2a_oauth_authorization_url and settings.a2a_oauth_token_url:
-        security_schemes["oauth2"] = SecurityScheme(
-            root=OAuth2SecurityScheme(
-                oauth2_metadata_url=settings.a2a_oauth_metadata_url,
-                flows=OAuthFlows(
-                    authorization_code=AuthorizationCodeOAuthFlow(
-                        authorization_url=settings.a2a_oauth_authorization_url,
-                        token_url=settings.a2a_oauth_token_url,
-                        refresh_url=None,
-                        scopes=settings.a2a_oauth_scopes,
-                    )
-                ),
-            )
-        )
-        security.append({"oauth2": list(settings.a2a_oauth_scopes.keys())})
-
     return AgentCard(
         name=settings.a2a_title,
         description=_build_agent_card_description(settings, deployment_context),
@@ -221,7 +206,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
         capabilities=AgentCapabilities(
-            streaming=settings.a2a_streaming,
+            streaming=True,
             extensions=[
                 AgentExtension(
                     uri=SESSION_BINDING_EXTENSION_URI,
@@ -368,7 +353,7 @@ def create_app(settings: Settings) -> FastAPI:
     client = CodexClient(settings)
     executor = CodexAgentExecutor(
         client,
-        streaming_enabled=settings.a2a_streaming,
+        streaming_enabled=True,
         cancel_abort_timeout_seconds=settings.a2a_cancel_abort_timeout_seconds,
         session_cache_ttl_seconds=settings.a2a_session_cache_ttl_seconds,
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
@@ -431,7 +416,7 @@ def create_app(settings: Settings) -> FastAPI:
                 "status": "ok",
                 "service": "codex-a2a-server",
                 "version": settings.a2a_version,
-                "streaming_enabled": settings.a2a_streaming,
+                "streaming_enabled": True,
                 "session_shell_enabled": settings.a2a_enable_session_shell,
                 "interrupt_request_ttl_seconds": settings.a2a_interrupt_request_ttl_seconds,
             }

@@ -80,6 +80,9 @@ deployments:
 This project improves the service boundary around Codex, but it is not a hard
 multi-tenant isolation layer.
 
+One deployed instance should be treated as a single-tenant trust boundary with
+a shared workspace/environment.
+
 - the underlying Codex runtime may still need provider credentials
 - one instance is not tenant-isolated by default
 - deploy scripts default to not persisting secrets unless explicitly opted in
@@ -187,12 +190,17 @@ docs instead of the root README.
 - [Usage Guide](docs/guide.md)
   Configuration, API contracts, client examples, streaming/session/interrupt
   details.
+- [Compatibility Guide](docs/compatibility.md)
+  Supported Python/runtime surface, extension stability, and ecosystem-facing
+  compatibility expectations.
 - [Deployment Guide](docs/deployment.md)
   systemd deployment from the published package, runtime secret strategy, and
   operations guidance.
 - [Script Guide](scripts/README.md)
   Entry points for bootstrap, managed deploy, uninstall, and release smoke
   test scripts.
+- [Contributing Guide](CONTRIBUTING.md)
+  Contributor workflow, validation baseline, and change expectations.
 - [Security Policy](SECURITY.md)
   Threat model, deployment caveats, and vulnerability disclosure guidance.
 

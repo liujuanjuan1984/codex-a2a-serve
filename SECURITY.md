@@ -7,11 +7,13 @@ JSON-RPC interfaces. It adds authentication, task/session contracts, streaming,
 and deployment tooling, but it does not fully isolate upstream model
 credentials from Codex runtime behavior.
 
+The current deployment model is a single-tenant trust boundary by design.
+
 ## Security Boundary
 
 - `A2A_BEARER_TOKEN` protects access to the A2A surface, but it is not a
   tenant-isolation boundary inside one deployed instance.
-- Within one `codex-a2a-serve` instance, consumers share the same underlying
+- Within one `codex-a2a-server` instance, consumers share the same underlying
   Codex workspace/environment by default.
 - LLM provider keys are consumed by the `codex` process. Prompt injection or
   indirect exfiltration attempts may still expose sensitive values.
@@ -27,6 +29,7 @@ credentials from Codex runtime behavior.
 This project is currently best suited for trusted or internal environments.
 Important limits:
 
+- Single-tenant trust boundary only; not a secure multi-tenant deployment profile
 - No per-tenant workspace isolation inside one instance
 - No hard guarantee that upstream provider keys are inaccessible to agent logic
 - Bearer-token auth only by default; stronger identity propagation is still an

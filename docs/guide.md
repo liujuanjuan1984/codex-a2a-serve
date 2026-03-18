@@ -71,13 +71,19 @@ The service publishes a machine-readable compatibility profile through Agent
 Card and OpenAPI metadata. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
-- which custom JSON-RPC methods are deployment extensions
+- which shared extensions are intended to be reused across this repo family
+- which Codex-specific JSON-RPC methods are product-specific extensions
 - which extension surfaces are required runtime metadata contracts
 - which methods are deployment-conditional rather than always available
 
 Current profile shape:
 
-- `profile_id=codex-a2a-core-plus-extensions-v1`
+- `profile_id=codex-a2a-single-tenant-coding-v1`
+- deployment profile:
+  - `id=single_tenant_shared_workspace`
+  - `single_tenant=true`
+  - `shared_workspace_across_consumers=true`
+  - `tenant_isolation=none`
 - core JSON-RPC methods:
   - `message/send`
   - `message/stream`
@@ -92,10 +98,16 @@ Current profile shape:
 Retention guidance:
 
 - Treat core methods as the generic client interoperability baseline.
+- Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for
   the current deployment model; they are not optional documentation-only hints.
-- Treat `codex.*` and `a2a.interrupt.*` JSON-RPC methods as declared custom
-  extensions that remain stable within the current major line.
+- Treat `urn:a2a:*` extension URIs in this repository as shared extension
+  conventions used across this repo family, not as claims that they are part
+  of the A2A core baseline.
+- Treat `a2a.interrupt.*` methods as shared extensions.
+- Treat `codex.*` methods and `metadata.codex.directory` as Codex-specific
+  extensions or provider-private operational surfaces rather than portable A2A
+  baseline capabilities.
 - Treat `codex.sessions.shell` as deployment-conditional. Discover it from the
   declared compatibility profile and extension contracts before calling it.
 
@@ -136,7 +148,6 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_STREAMING`: enable SSE streaming (`/v1/message:stream`), default `true`
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the public lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
@@ -144,10 +155,6 @@ Current implementation note:
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
 - `A2A_DOCUMENTATION_URL`: optional URL exposed via Agent Card
   `documentationUrl`
-- `A2A_OAUTH_AUTHORIZATION_URL`: OAuth2 authorization URL (declarative only)
-- `A2A_OAUTH_TOKEN_URL`: OAuth2 token URL (declarative only)
-- `A2A_OAUTH_METADATA_URL`: OAuth2 metadata URL (optional)
-- `A2A_OAUTH_SCOPES`: comma-separated OAuth2 scopes (declarative only)
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for
   `(identity, contextId) -> Codex session_id`, default `3600`
 - `A2A_SESSION_CACHE_MAXSIZE`: max cache entries, default `10000`
@@ -211,6 +218,9 @@ managed systemd deployment flow.
   status plus deployment-relevant flags such as streaming, session shell, and
   interrupt TTL; it does not call upstream Codex.
 - The service forwards A2A `message:send` to Codex session/message calls.
+- Streaming is always enabled for this service surface. `/v1/message:stream`
+  and JSON-RPC `message/stream` are stable core capabilities rather than
+  deployment-time toggles.
 - `codex.sessions.shell` is a session-scoped shell control method for
   ownership, attribution, and traceability. It keeps `session_id` in the A2A
   contract, but the underlying execution still uses Codex `command/exec`
@@ -301,11 +311,6 @@ managed systemd deployment flow.
     boundary bypass.
   - If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
     accepted.
-- OAuth2 settings are currently declarative in Agent Card only; runtime token
-  verification for OAuth2 is not implemented yet.
-- Agent Card declares OAuth2 only when both
-  `A2A_OAUTH_AUTHORIZATION_URL` and `A2A_OAUTH_TOKEN_URL` are set.
-
 ## Authentication Setup For Local Examples
 
 For local development examples, prefer generating a temporary token once and
