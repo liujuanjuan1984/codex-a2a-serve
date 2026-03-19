@@ -5,15 +5,6 @@ from typing import Any
 
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
 _INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
-_INTERRUPT_TEXT_FIELD_KEYS = (
-    "message",
-    "description",
-    "reason",
-    "prompt",
-    "display_message",
-    "displayMessage",
-)
-_INTERRUPT_NESTED_DETAIL_KEYS = ("request", "context", "prompt")
 _INTERRUPT_DISPLAY_MESSAGE_NESTED_PATHS = (
     ("request", "message"),
     ("request", "description"),
@@ -81,14 +72,6 @@ def extract_string_list(value: Any) -> list[str]:
 
 def extract_interrupt_text_details(props: Mapping[str, Any]) -> dict[str, Any]:
     details: dict[str, Any] = {}
-    for key in _INTERRUPT_TEXT_FIELD_KEYS:
-        value = _normalized_string(props.get(key))
-        if value is not None:
-            details[key] = value
-    for key in _INTERRUPT_NESTED_DETAIL_KEYS:
-        value = props.get(key)
-        if isinstance(value, Mapping):
-            details[key] = dict(value)
     display_message = (
         _normalized_string(props.get("display_message"))
         or _normalized_string(props.get("displayMessage"))
@@ -105,6 +88,31 @@ def extract_interrupt_text_details(props: Mapping[str, Any]) -> dict[str, Any]:
 
 def extract_interrupt_questions(props: Mapping[str, Any]) -> list[Any]:
     return _first_list(props, *_INTERRUPT_QUESTION_LIST_PATHS)
+
+
+def diagnose_interrupt_event(event: Mapping[str, Any]) -> str | None:
+    event_type = event.get("type")
+    if not isinstance(event_type, str):
+        return None
+    if event_type in _INTERRUPT_ASKED_EVENT_TYPES:
+        props = event.get("properties")
+        if not isinstance(props, Mapping):
+            return "interrupt asked event missing properties mapping"
+        request_id = props.get("id")
+        if not isinstance(request_id, str) or not request_id.strip():
+            return "interrupt asked event missing request id"
+        return None
+    if event_type in _INTERRUPT_RESOLVED_EVENT_TYPES:
+        props = event.get("properties")
+        if not isinstance(props, Mapping):
+            return "interrupt resolved event missing properties mapping"
+        request_id = props.get("requestID") or props.get("id")
+        if not isinstance(request_id, str) or not request_id.strip():
+            return "interrupt resolved event missing request id"
+        return None
+    if event_type.startswith("permission.") or event_type.startswith("question."):
+        return f"unsupported interrupt event type: {event_type}"
+    return None
 
 
 def extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] | None:

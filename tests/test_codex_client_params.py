@@ -690,7 +690,7 @@ async def test_unsupported_server_request_returns_jsonrpc_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_permission_request_emits_display_message_and_preserves_aliases() -> None:
+async def test_permission_request_emits_display_message_and_keeps_raw_payload_private() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     events: list[dict] = []
 
@@ -720,13 +720,14 @@ async def test_permission_request_emits_display_message_and_preserves_aliases() 
     assert props["id"] == "301"
     assert props["permission"] == "exec"
     assert props["display_message"] == "Agent wants to read the environment file."
-    assert props["displayMessage"] == "Agent wants to read the environment file."
-    assert props["description"] == "Fallback description should still be preserved."
-    assert props["reason"] == "The command needs confirmation before continuing."
+    assert "displayMessage" not in props
+    assert "description" not in props
+    assert "reason" not in props
+    assert props["metadata"]["raw"]["displayMessage"] == "Agent wants to read the environment file."
 
 
 @pytest.mark.asyncio
-async def test_question_request_emits_display_message_and_preserves_aliases() -> None:
+async def test_question_request_emits_display_message_and_keeps_raw_payload_private() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     events: list[dict] = []
 
@@ -752,9 +753,10 @@ async def test_question_request_emits_display_message_and_preserves_aliases() ->
     props = events[0]["properties"]
     assert props["id"] == "302"
     assert props["display_message"] == "Please confirm how the agent should continue."
-    assert props["description"] == "Please confirm how the agent should continue."
-    assert props["prompt"] == "Proceed with deployment?"
+    assert "description" not in props
+    assert "prompt" not in props
     assert props["questions"] == [{"id": "q1", "question": "Proceed with deployment?"}]
+    assert props["metadata"]["raw"]["prompt"] == "Proceed with deployment?"
 
 
 @pytest.mark.asyncio
@@ -785,7 +787,8 @@ async def test_permission_request_emits_nested_request_text_fields() -> None:
     assert len(events) == 1
     props = events[0]["properties"]
     assert props["display_message"] == "Agent wants to read the environment file."
-    assert props["request"] == {
+    assert "request" not in props
+    assert props["metadata"]["raw"]["request"] == {
         "description": "Agent wants to read the environment file.",
         "reason": "The command needs confirmation before continuing.",
     }
@@ -818,10 +821,6 @@ async def test_question_request_emits_nested_context_fields_and_question_fallbac
     assert len(events) == 1
     props = events[0]["properties"]
     assert props["display_message"] == "Please confirm how the agent should continue."
-    assert props["context"] == {
-        "description": "Please confirm how the agent should continue.",
-        "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
-    }
     assert props["questions"] == [{"id": "q1", "question": "Proceed with deployment?"}]
     assert props["metadata"]["method"] == "item/tool/requestUserInput"
     assert props["metadata"]["raw"]["context"]["description"] == (

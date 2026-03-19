@@ -1,7 +1,7 @@
 from codex_a2a_server.stream_interrupts import extract_interrupt_asked_event
 
 
-def test_extract_permission_interrupt_keeps_display_message_and_aliases() -> None:
+def test_extract_permission_interrupt_keeps_display_message_only_in_shared_details() -> None:
     event = {
         "type": "permission.asked",
         "properties": {
@@ -24,15 +24,12 @@ def test_extract_permission_interrupt_keeps_display_message_and_aliases() -> Non
             "patterns": ["/repo/.env"],
             "always": ["/repo/.env.example"],
             "display_message": "Agent wants to read the environment file.",
-            "displayMessage": "Legacy display alias.",
-            "description": "Fallback description.",
-            "reason": "The command needs confirmation.",
         },
         "codex_private": {},
     }
 
 
-def test_extract_question_interrupt_keeps_display_message_and_aliases() -> None:
+def test_extract_question_interrupt_keeps_display_message_only_in_shared_details() -> None:
     event = {
         "type": "question.asked",
         "properties": {
@@ -50,14 +47,12 @@ def test_extract_question_interrupt_keeps_display_message_and_aliases() -> None:
         "details": {
             "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
             "display_message": "Please confirm how the agent should continue.",
-            "prompt": "Proceed with deployment?",
-            "description": "Deployment will update the production service.",
         },
         "codex_private": {},
     }
 
 
-def test_extract_permission_interrupt_keeps_nested_request_details() -> None:
+def test_extract_permission_interrupt_derives_display_message_from_nested_request() -> None:
     event = {
         "type": "permission.asked",
         "properties": {
@@ -77,17 +72,13 @@ def test_extract_permission_interrupt_keeps_nested_request_details() -> None:
             "permission": "approval",
             "patterns": [],
             "always": [],
-            "request": {
-                "description": "Agent wants to read the environment file.",
-                "reason": "The command needs confirmation.",
-            },
             "display_message": "Agent wants to read the environment file.",
         },
         "codex_private": {},
     }
 
 
-def test_extract_question_interrupt_keeps_nested_context_and_question_fallback() -> None:
+def test_extract_question_interrupt_keeps_question_fallback_and_private_metadata() -> None:
     event = {
         "type": "question.asked",
         "properties": {
@@ -105,10 +96,6 @@ def test_extract_question_interrupt_keeps_nested_context_and_question_fallback()
         "interrupt_type": "question",
         "details": {
             "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
-            "context": {
-                "description": "Please confirm how the agent should continue.",
-                "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
-            },
             "display_message": "Please confirm how the agent should continue.",
         },
         "codex_private": {"metadata": {"method": "item/tool/requestUserInput"}},

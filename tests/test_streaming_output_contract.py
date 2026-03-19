@@ -628,14 +628,79 @@ async def test_streaming_emits_interrupt_status_for_nested_question_details() ->
     assert interrupt["details"]["questions"] == [
         {"id": "q1", "question": "Proceed with deployment?"}
     ]
-    assert interrupt["details"]["context"] == {
-        "description": "Please confirm how the agent should continue.",
-        "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
-    }
     assert question_interrupts[0].metadata["codex"]["interrupt"]["metadata"]["method"] == (
         "item/tool/requestUserInput"
     )
     assert question_interrupts[0].status.state == TaskState.input_required
+
+
+@pytest.mark.asyncio
+async def test_streaming_logs_unsupported_interrupt_event_type_with_payload(caplog) -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            {
+                "type": "question.pending",
+                "properties": {
+                    "id": "q-pending-1",
+                    "sessionID": "ses-1",
+                    "status": "pending",
+                },
+            },
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
+        ],
+        response_text="answer",
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.streaming"):
+        await executor.execute(
+            make_request_context(
+                task_id="task-q-pending", context_id="ctx-q-pending", text="hello"
+            ),
+            queue,
+        )
+
+    assert any(
+        "unsupported interrupt event type: question.pending" in record.message
+        and "'status': 'pending'" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_logs_interrupt_shape_mismatch_with_payload(caplog) -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            {
+                "type": "permission.asked",
+                "properties": {
+                    "sessionID": "ses-1",
+                    "permission": "read",
+                },
+            },
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
+        ],
+        response_text="answer",
+    )
+    executor = CodexAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.streaming"):
+        await executor.execute(
+            make_request_context(
+                task_id="task-perm-shape", context_id="ctx-perm-shape", text="hello"
+            ),
+            queue,
+        )
+
+    assert any(
+        "interrupt asked event missing request id" in record.message
+        and "'permission': 'read'" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
