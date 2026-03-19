@@ -2,19 +2,31 @@
 
 > Turn Codex into a stateful, production-oriented A2A agent service.
 
-`codex-a2a-server` exposes Codex through standard A2A interfaces and adds the
-operational pieces that raw agent runtimes usually do not provide by default:
-authentication, session continuity, streaming contracts, interrupt handling,
-and documentation for running it as a service.
+`codex-a2a-server` turns the local Codex runtime into an A2A service with
+auth, streaming, session continuity, and interrupt handling.
 
-## Service Path
+## What This Is
+
+- An A2A adapter service in front of the local Codex runtime.
+- A good fit when you want to keep Codex as the runtime but expose a stable
+  network service for apps, gateways, or A2A clients.
+- Not a multi-tenant isolation layer. One deployed instance should be treated
+  as one single-tenant trust boundary.
+
+## Logical Components
 
 ```mermaid
-flowchart LR
-    Client["A2A client / app"] --> Server["codex-a2a-server"]
-    Server --> Contracts["auth + A2A contract mapping"]
-    Contracts --> Codex["Codex app-server / CLI runtime"]
-    Codex --> Workspace["workspace + provider credentials"]
+flowchart TD
+    Client["A2A client / app"]
+
+    subgraph ServerSide["Server-side"]
+        Adapter["codex-a2a-server\nA2A adapter service"]
+        Runtime["Codex app-server / CLI runtime"]
+
+        Adapter <--> Runtime
+    end
+
+    Client <--> Adapter
 ```
 
 The service sits between A2A consumers and the local Codex runtime. It keeps
@@ -47,30 +59,7 @@ Use the docs by task:
 - [Architecture Guide](docs/architecture.md) for responsibilities and request flow
 - [Contributing Guide](CONTRIBUTING.md) for branch, validation, and review workflow
 
-## Why This Project Exists
-
-Most coding agents are built first as interactive tools, not as reusable
-service endpoints. This project turns Codex into an agent service that can be
-embedded into applications, gateways, and orchestration systems without
-forcing each consumer to re-implement transport bridging, auth, or runtime
-operations.
-
-In practice, `codex-a2a-server` acts as:
-
-- a protocol bridge from A2A to Codex
-- a security boundary around the Codex runtime
-- a stable contract layer for session, streaming, and interrupt behaviors
-
-## Vision
-
-Build a reusable adapter layer that lets coding agents behave like service
-infrastructure rather than local-only tools:
-
-- standard transport contracts instead of provider-specific glue
-- explicit runtime boundaries instead of ad-hoc shell wrappers
-- production-friendly runtime behavior and observability instead of demo-only setups
-
-## What It Already Provides
+## What You Get
 
 - A2A HTTP+JSON and JSON-RPC entrypoints for Codex
 - SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
