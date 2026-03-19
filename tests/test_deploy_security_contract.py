@@ -1,6 +1,8 @@
 from pathlib import Path
 
-ENABLE_INSTANCE_TEXT = Path("scripts/deploy/enable_instance.sh").read_text()
+ENABLE_INSTANCE_TEXT = Path(
+    "src/codex_a2a_server/assets/scripts/deploy/enable_instance.sh"
+).read_text()
 DEPLOYMENT_GUIDE_TEXT = Path("docs/deployment.md").read_text()
 GUIDE_TEXT = Path("docs/guide.md").read_text()
 SCRIPTS_README_TEXT = Path("scripts/README.md").read_text()

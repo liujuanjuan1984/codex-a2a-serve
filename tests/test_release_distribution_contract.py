@@ -7,15 +7,16 @@ SCRIPTS_README_TEXT = Path("scripts/README.md").read_text()
 PUBLISH_WORKFLOW_TEXT = Path(".github/workflows/publish.yml").read_text()
 DEPLOYMENT_GUIDE_TEXT = Path("docs/deployment.md").read_text()
 DEPLOY_SCRIPT_TEXT = Path("scripts/deploy.sh").read_text()
+INIT_SYSTEM_SCRIPT_TEXT = Path("scripts/init_system.sh").read_text()
+UNINSTALL_SCRIPT_TEXT = Path("scripts/uninstall.sh").read_text()
+SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 SETUP_INSTANCE_TEXT = Path("scripts/deploy/setup_instance.sh").read_text()
 INSTALL_UNITS_TEXT = Path("scripts/deploy/install_units.sh").read_text()
-ASSET_DEPLOY_SCRIPT_TEXT = Path("src/codex_a2a_server/assets/scripts/deploy.sh").read_text()
-ASSET_SETUP_INSTANCE_TEXT = Path(
-    "src/codex_a2a_server/assets/scripts/deploy/setup_instance.sh"
-).read_text()
-ASSET_INSTALL_UNITS_TEXT = Path(
-    "src/codex_a2a_server/assets/scripts/deploy/install_units.sh"
-).read_text()
+ENABLE_INSTANCE_TEXT = Path("scripts/deploy/enable_instance.sh").read_text()
+UPDATE_A2A_TEXT = Path("scripts/deploy/update_a2a.sh").read_text()
+SHELL_HELPERS_TEXT = Path("scripts/shell_helpers.sh").read_text()
+SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
+PROVIDER_SECRET_KEYS_TEXT = Path("scripts/deploy/provider_secret_env_keys.sh").read_text()
 
 
 def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
@@ -81,6 +82,15 @@ def test_deploy_scripts_no_longer_require_github_runtime_credentials() -> None:
 
 
 def test_packaged_deploy_assets_match_repository_scripts() -> None:
-    assert DEPLOY_SCRIPT_TEXT == ASSET_DEPLOY_SCRIPT_TEXT
-    assert SETUP_INSTANCE_TEXT == ASSET_SETUP_INSTANCE_TEXT
-    assert INSTALL_UNITS_TEXT == ASSET_INSTALL_UNITS_TEXT
+    assert "assets/scripts/deploy.sh" in DEPLOY_SCRIPT_TEXT
+    assert 'exec bash "${ASSET_SCRIPT}" "$@"' in DEPLOY_SCRIPT_TEXT
+    assert "assets/scripts/init_system.sh" in INIT_SYSTEM_SCRIPT_TEXT
+    assert "assets/scripts/uninstall.sh" in UNINSTALL_SCRIPT_TEXT
+    assert "assets/scripts/smoke_test_built_cli.sh" in SMOKE_TEST_SCRIPT_TEXT
+    assert "assets/scripts/shell_helpers.sh" in SHELL_HELPERS_TEXT
+    assert "assets/scripts/sync_codex_docs.sh" in SYNC_CODEX_DOCS_TEXT
+    assert "assets/scripts/deploy/setup_instance.sh" in SETUP_INSTANCE_TEXT
+    assert "assets/scripts/deploy/install_units.sh" in INSTALL_UNITS_TEXT
+    assert "assets/scripts/deploy/enable_instance.sh" in ENABLE_INSTANCE_TEXT
+    assert "assets/scripts/deploy/update_a2a.sh" in UPDATE_A2A_TEXT
+    assert "assets/scripts/deploy/provider_secret_env_keys.sh" in PROVIDER_SECRET_KEYS_TEXT

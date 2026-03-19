@@ -18,10 +18,9 @@ overview, runtime contracts, or deployment rationale in detail.
   bootstrap host prerequisites and install the published `codex-a2a-server`
   runtime for managed systemd deployment.
 - [`scripts/deploy.sh`](./deploy.sh):
-  source/internal helper behind `codex-a2a-server deploy`; it creates or
-  updates one long-running `codex-a2a@.service` instance backed by the
-  published package runtime, including an authenticated `/health` readiness
-  probe when the health endpoint is enabled.
+  thin source-checkout wrapper around the packaged deploy asset used by
+  `codex-a2a-server deploy`, including authenticated `/health` readiness in
+  the canonical implementation.
 - [`scripts/uninstall.sh`](./uninstall.sh):
   remove one deployed instance (preview-first, explicit confirm required).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh):
@@ -42,8 +41,10 @@ overview, runtime contracts, or deployment rationale in detail.
   [docs/guide.md](../docs/guide.md).
 - For managed release-based deployment, prefer `codex-a2a-server deploy`
   instead of invoking `scripts/deploy.sh` directly.
-- `scripts/deploy/` contains internal helpers orchestrated by
-  `scripts/deploy.sh`.
+- Shell implementations now live under `src/codex_a2a_server/assets/scripts/`.
+  The repository-level `scripts/` entrypoints are thin wrappers around those
+  packaged assets so source runs and released CLI deploys share one
+  implementation.
 - `scripts/smoke_test_built_cli.sh` validates that the built wheel can be installed by
   `uv tool` and that the released CLI becomes healthy.
 - Keep long-form documentation changes in `docs/` to avoid divergence.

@@ -1,46 +1,13 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-# Shared provider secret environment keys for deploy scripts.
-PROVIDER_SECRET_ENV_KEYS=(
-  GOOGLE_GENERATIVE_AI_API_KEY
-  OPENAI_API_KEY
-  ANTHROPIC_API_KEY
-  AZURE_OPENAI_API_KEY
-  OPENROUTER_API_KEY
-)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ASSET_SCRIPT="${ROOT_DIR}/src/codex_a2a_server/assets/scripts/deploy/provider_secret_env_keys.sh"
 
-join_provider_secret_env_keys() {
-  local separator="${1:- | }"
-  local result=""
-  local key=""
-  for key in "${PROVIDER_SECRET_ENV_KEYS[@]}"; do
-    if [[ -n "$result" ]]; then
-      result+="${separator}"
-    fi
-    result+="${key}"
-  done
-  echo "$result"
-}
+if [[ ! -f "${ASSET_SCRIPT}" ]]; then
+  echo "Packaged provider_secret_env_keys asset not found: ${ASSET_SCRIPT}" >&2
+  exit 1
+fi
 
-provider_secret_env_for_cli_key() {
-  case "${1,,}" in
-    google_generative_ai_api_key|google_api_key)
-      echo "GOOGLE_GENERATIVE_AI_API_KEY"
-      ;;
-    openai_api_key)
-      echo "OPENAI_API_KEY"
-      ;;
-    anthropic_api_key)
-      echo "ANTHROPIC_API_KEY"
-      ;;
-    azure_openai_api_key)
-      echo "AZURE_OPENAI_API_KEY"
-      ;;
-    openrouter_api_key)
-      echo "OPENROUTER_API_KEY"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
+exec bash "${ASSET_SCRIPT}" "$@"
