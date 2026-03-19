@@ -9,6 +9,13 @@ DEPLOYMENT_GUIDE_TEXT = Path("docs/deployment.md").read_text()
 DEPLOY_SCRIPT_TEXT = Path("scripts/deploy.sh").read_text()
 SETUP_INSTANCE_TEXT = Path("scripts/deploy/setup_instance.sh").read_text()
 INSTALL_UNITS_TEXT = Path("scripts/deploy/install_units.sh").read_text()
+ASSET_DEPLOY_SCRIPT_TEXT = Path("src/codex_a2a_server/assets/scripts/deploy.sh").read_text()
+ASSET_SETUP_INSTANCE_TEXT = Path(
+    "src/codex_a2a_server/assets/scripts/deploy/setup_instance.sh"
+).read_text()
+ASSET_INSTALL_UNITS_TEXT = Path(
+    "src/codex_a2a_server/assets/scripts/deploy/install_units.sh"
+).read_text()
 
 
 def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
@@ -71,3 +78,9 @@ def test_deploy_scripts_no_longer_require_github_runtime_credentials() -> None:
     assert "gh auth login" not in SETUP_INSTANCE_TEXT
     assert "GIT_ASKPASS" not in SETUP_INSTANCE_TEXT
     assert "config/codex.auth.env" not in INSTALL_UNITS_TEXT
+
+
+def test_packaged_deploy_assets_match_repository_scripts() -> None:
+    assert DEPLOY_SCRIPT_TEXT == ASSET_DEPLOY_SCRIPT_TEXT
+    assert SETUP_INSTANCE_TEXT == ASSET_SETUP_INSTANCE_TEXT
+    assert INSTALL_UNITS_TEXT == ASSET_INSTALL_UNITS_TEXT
