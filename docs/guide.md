@@ -1,11 +1,9 @@
 # Usage Guide
 
-This guide is the technical reference for day-to-day integration. It focuses on
-runtime configuration, transport contracts, streaming/session/interrupt
-behavior, and client examples.
-
-If you are looking for the quickest install/start path, project value, or
-documentation entry navigation, start from [README.md](../README.md) instead.
+This guide covers runtime configuration, transport contracts,
+streaming/session/interrupt behavior, and client examples.
+It is the canonical document for implementation-level protocol contracts;
+[README.md](../README.md) stays at overview level.
 
 ## Transport Contracts
 

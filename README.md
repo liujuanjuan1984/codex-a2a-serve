@@ -28,81 +28,21 @@ flowchart TD
     Client <--> Adapter
 ```
 
-## Fast Start
+## Quick Start
 
-For most users, the published CLI is the default path. Install it with
-`uv tool`, point it at a workspace, and start the service directly:
-
-```bash
-uv tool install codex-a2a-server
-export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a-server
-```
-
-Before starting:
-
-- install and verify the local `codex` CLI itself
-- make sure Codex provider/model/auth configuration already works outside this repository
-- expect startup to fail fast if the local `codex` runtime is missing or cannot initialize
-
-Contributors working on unreleased changes should use the source-tree path
-instead: `uv sync --all-extras` then `uv run codex-a2a-server`.
-
-Use the docs by task:
-
-- [Usage Guide](docs/guide.md) for configuration, API contracts, and full startup examples
-- [Architecture Guide](docs/architecture.md) for responsibilities and request flow
-- [Contributing Guide](CONTRIBUTING.md) for branch, validation, and review workflow
-
-## What You Get
-
-- A2A HTTP+JSON and JSON-RPC entrypoints for Codex
-- SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
-- session continuation and session query extensions
-- interrupt lifecycle mapping and callback validation
-- bearer-token auth, payload logging controls, and secret-handling guardrails
-- released-CLI startup and source-based runtime paths
-
-## Security Model
-
-This project improves the service boundary around Codex, but it is not a hard
-multi-tenant isolation layer.
-
-One running instance should be treated as a single-tenant trust boundary with
-a shared workspace/environment.
-
-- the underlying Codex runtime may still need provider credentials
-- one instance is not tenant-isolated by default
-- local runtime setup still needs a controlled environment
-
-Read before use:
-
-- [SECURITY.md](SECURITY.md)
-
-## Recommended Client Side
-
-If you want a client-side integration layer to consume this service, prefer
-[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
-
-It is a better place for client concerns such as A2A consumption, upstream
-adapter normalization, and application-facing integration, while
-`codex-a2a-server` stays focused on the server/runtime boundary around Codex.
-
-## Install Released CLI
-
-Install the latest release:
+Install the released CLI with `uv tool`:
 
 ```bash
 uv tool install codex-a2a-server
 ```
 
-Upgrade an existing installation:
+Upgrade later with:
 
 ```bash
 uv tool upgrade codex-a2a-server
 ```
 
-Install an exact release:
+Install an exact release with:
 
 ```bash
 uv tool install "codex-a2a-server==<version>"
@@ -122,14 +62,61 @@ export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
-codex-a2a-server
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a-server
 ```
 
-Default address: `http://127.0.0.1:8000`
+Default local address: `http://127.0.0.1:8000`
 
-For a longer self-start example with model and timeout overrides, use the
+## What You Get
+
+- A2A HTTP+JSON and JSON-RPC entrypoints for Codex
+- SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
+- session continuation and session query extensions
+- interrupt lifecycle mapping and callback validation
+- bearer-token auth, payload logging controls, and secret-handling guardrails
+- released-CLI startup and source-based runtime paths
+
+Detailed protocol contracts, examples, and extension docs live in
 [Usage Guide](docs/guide.md).
+
+## When To Use It
+
+Use this project when:
+
+- you want to keep Codex as the runtime
+- you need A2A transports and Agent Card discovery
+- you want a thin service boundary instead of building your own adapter
+
+Look elsewhere if:
+
+- you need hard multi-tenant isolation inside one shared runtime
+- you want this project to manage your process supervisor or host bootstrap
+- you want a general client integration layer rather than a server wrapper
+
+## Recommended Client Side
+
+If you want a client-side integration layer to consume this service, prefer
+[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
+
+It is a better place for client concerns such as A2A consumption, upstream
+adapter normalization, and application-facing integration, while
+`codex-a2a-server` stays focused on the server/runtime boundary around Codex.
+
+## Deployment Boundary
+
+This repository improves the service boundary around Codex, but it does not
+turn Codex into a hardened multi-tenant platform.
+
+- `A2A_BEARER_TOKEN` protects the A2A surface.
+- Provider auth and default model configuration remain on the Codex side.
+- One deployed instance should be treated as a single-tenant trust boundary.
+- For mutually untrusted tenants, run separate instances with isolated users,
+  workspaces, credentials, and ports.
+
+Read before deployment:
+
+- [SECURITY.md](SECURITY.md)
+- [Usage Guide](docs/guide.md)
 
 ## Release Model
 
@@ -142,6 +129,19 @@ Releases.
 - let the tag trigger PyPI and GitHub Release publication
 
 This repository does not publish directly from an unmerged feature branch.
+
+## Further Reading
+
+- [Usage Guide](docs/guide.md)
+  Configuration, API contracts, client examples, streaming/session/interrupt
+  details.
+- [Architecture Guide](docs/architecture.md)
+  System structure, boundaries, and request flow.
+- [Compatibility Guide](docs/compatibility.md)
+  Supported Python/runtime surface, extension stability, and ecosystem-facing
+  compatibility expectations.
+- [Security Policy](SECURITY.md)
+  Threat model, deployment caveats, and vulnerability disclosure guidance.
 
 ## Development From Source
 
@@ -178,34 +178,12 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a-server
 For configuration, transport examples, and protocol details, use the dedicated
 docs instead of the root README.
 
-## Documentation Map
-
-- [Architecture Guide](docs/architecture.md)
-  System structure, boundaries, and request flow.
-- [Usage Guide](docs/guide.md)
-  Configuration, API contracts, client examples, streaming/session/interrupt
-  details.
-- [Compatibility Guide](docs/compatibility.md)
-  Supported Python/runtime surface, extension stability, and ecosystem-facing
-  compatibility expectations.
-- [Contributing Guide](CONTRIBUTING.md)
-  Contributor workflow, validation baseline, and change expectations.
-- [Scripts Reference](scripts/README.md)
-  Remaining repository-maintainer scripts and when to use them.
-- [Vendored Codex References](vendor/codex/SYNC.md)
-  Upstream Codex snapshots kept for offline reference and schema comparison;
-  they are not the primary source of this repository's service guarantees.
-- [Security Policy](SECURITY.md)
-  Threat model, deployment caveats, and vulnerability disclosure guidance.
-
 ## Development
 
-Baseline validation:
-
-```bash
-uv run pre-commit run --all-files
-uv run pytest
-```
+For contributor workflow, validation baseline, helper scripts, and upstream
+reference snapshots, see [Contributing Guide](CONTRIBUTING.md),
+[Scripts Reference](scripts/README.md), and
+[Vendored Codex References](vendor/codex/SYNC.md).
 
 ## License
 

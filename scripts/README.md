@@ -22,11 +22,6 @@ directory.
 - [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh):
   refresh vendored Codex documentation snapshots used by this repository.
 
-## Quick Links
-
-- [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh)
-- [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh)
-
 ## Notes
 
 - End-user runtime startup does not use repository scripts. Prefer the
