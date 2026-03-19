@@ -5,24 +5,6 @@ from typing import Any
 
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
 _INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
-_INTERRUPT_DISPLAY_MESSAGE_NESTED_PATHS = (
-    ("request", "message"),
-    ("request", "description"),
-    ("request", "prompt"),
-    ("request", "reason"),
-    ("context", "message"),
-    ("context", "description"),
-    ("context", "prompt"),
-    ("context", "reason"),
-    ("prompt", "message"),
-    ("prompt", "description"),
-)
-_INTERRUPT_QUESTION_LIST_PATHS = (
-    ("questions",),
-    ("request", "questions"),
-    ("context", "questions"),
-    ("prompt", "questions"),
-)
 
 
 def _normalized_string(value: Any) -> str | None:
@@ -30,31 +12,6 @@ def _normalized_string(value: Any) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
-
-
-def _resolve_nested_value(payload: Mapping[str, Any], path: tuple[str, ...]) -> Any:
-    current: Any = payload
-    for key in path:
-        if not isinstance(current, Mapping):
-            return None
-        current = current.get(key)
-    return current
-
-
-def _first_nested_string(payload: Mapping[str, Any], *paths: tuple[str, ...]) -> str | None:
-    for path in paths:
-        value = _normalized_string(_resolve_nested_value(payload, path))
-        if value is not None:
-            return value
-    return None
-
-
-def _first_list(payload: Mapping[str, Any], *paths: tuple[str, ...]) -> list[Any]:
-    for path in paths:
-        value = _resolve_nested_value(payload, path)
-        if isinstance(value, list):
-            return value
-    return []
 
 
 def extract_string_list(value: Any) -> list[str]:
@@ -72,22 +29,17 @@ def extract_string_list(value: Any) -> list[str]:
 
 def extract_interrupt_text_details(props: Mapping[str, Any]) -> dict[str, Any]:
     details: dict[str, Any] = {}
-    display_message = (
-        _normalized_string(props.get("display_message"))
-        or _normalized_string(props.get("displayMessage"))
-        or _normalized_string(props.get("message"))
-        or _normalized_string(props.get("description"))
-        or _normalized_string(props.get("prompt"))
-        or _normalized_string(props.get("reason"))
-        or _first_nested_string(props, *_INTERRUPT_DISPLAY_MESSAGE_NESTED_PATHS)
-    )
+    display_message = _normalized_string(props.get("display_message"))
     if display_message is not None:
         details["display_message"] = display_message
     return details
 
 
 def extract_interrupt_questions(props: Mapping[str, Any]) -> list[Any]:
-    return _first_list(props, *_INTERRUPT_QUESTION_LIST_PATHS)
+    questions = props.get("questions")
+    if isinstance(questions, list):
+        return questions
+    return []
 
 
 def diagnose_interrupt_event(event: Mapping[str, Any]) -> str | None:

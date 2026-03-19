@@ -576,7 +576,7 @@ async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> 
 
 
 @pytest.mark.asyncio
-async def test_streaming_emits_interrupt_status_for_nested_question_details() -> None:
+async def test_streaming_emits_interrupt_status_for_protocol_question_details() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[
             {
@@ -588,15 +588,11 @@ async def test_streaming_emits_interrupt_status_for_nested_question_details() ->
                         "method": "item/tool/requestUserInput",
                         "raw": {
                             "context": {
-                                "description": "Please confirm how the agent should continue.",
-                                "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
+                                "description": "Please confirm how the agent should continue."
                             }
                         },
                     },
-                    "context": {
-                        "description": "Please confirm how the agent should continue.",
-                        "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
-                    },
+                    "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
                 },
             },
             _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
@@ -622,12 +618,10 @@ async def test_streaming_emits_interrupt_status_for_nested_question_details() ->
     assert len(question_interrupts) == 1
     interrupt = _interrupt_meta(question_interrupts[0])
     assert interrupt["request_id"] == "q-nested-1"
-    assert (
-        interrupt["details"]["display_message"] == "Please confirm how the agent should continue."
-    )
     assert interrupt["details"]["questions"] == [
         {"id": "q1", "question": "Proceed with deployment?"}
     ]
+    assert "display_message" not in interrupt["details"]
     assert question_interrupts[0].metadata["codex"]["interrupt"]["metadata"]["method"] == (
         "item/tool/requestUserInput"
     )
