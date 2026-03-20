@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 import logging
 import secrets
@@ -17,7 +16,6 @@ from a2a.server.apps.rest.rest_adapter import (
     InvalidRequestError,
     RESTAdapter,
     ServerError,
-    rest_stream_error_handler,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
@@ -27,6 +25,7 @@ from a2a.types import (
     AgentInterface,
     AgentSkill,
     HTTPAuthSecurityScheme,
+    InternalError,
     SecurityScheme,
     TransportProtocol,
 )
@@ -106,37 +105,38 @@ def _build_sse_streaming_route(
     context_builder: DefaultCallContextBuilder,
     sse_ping_seconds: float,
 ) -> Callable[[Request], Awaitable[EventSourceResponse]]:
-    @rest_stream_error_handler
-    async def route(request):
+    async def route(request: Request):
         try:
             await request.body()
+            call_context = context_builder.build(request)
+
+            async def event_generator(
+                stream: AsyncIterable[object],
+            ) -> AsyncIterator[dict[str, object]]:
+                async for item in stream:
+                    yield {"data": item}
+
+            return EventSourceResponse(
+                event_generator(method(request, call_context)),
+                # sse-starlette accepts float ping intervals at runtime.
+                ping=cast(Any, float(sse_ping_seconds)),
+            )
         except (ValueError, RuntimeError, OSError) as e:
             raise ServerError(
                 error=InvalidRequestError(message=f"Failed to pre-consume request body: {e}")
             ) from e
-
-        call_context = context_builder.build(request)
-
-        async def event_generator(
-            stream: AsyncIterable[object],
-        ) -> AsyncIterator[dict[str, object]]:
-            async for item in stream:
-                yield {"data": item}
-
-        return EventSourceResponse(
-            event_generator(method(request, call_context)),
-            ping=float(sse_ping_seconds),
-        )
-
-    cast(Any, route).__signature__ = inspect.Signature(
-        parameters=[
-            inspect.Parameter(
-                "request",
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                annotation=Request,
+        except ServerError as e:
+            error = e.error or InternalError(message="Internal error due to unknown reason")
+            log_level = logging.ERROR if isinstance(error, InternalError) else logging.WARNING
+            logger.log(
+                log_level,
+                "Request error: Code=%s, Message='%s'%s",
+                error.code,
+                error.message,
+                ", Data=" + str(error.data) if error.data else "",
             )
-        ]
-    )
+            raise
+
     return route
 
 

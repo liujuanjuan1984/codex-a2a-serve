@@ -10,7 +10,7 @@ import shutil
 import time
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 from . import __version__
 from .config import Settings
@@ -177,11 +177,16 @@ def _extract_tool_status(payload: dict[str, Any]) -> str | None:
     return None
 
 
-def _tool_source_method(method: str) -> str | None:
+def _tool_source_method(method: str) -> ToolCallSourceMethod | None:
     parts = method.split("/")
     if len(parts) < 2:
         return None
-    return _normalized_string(parts[1])
+    normalized = _normalized_string(parts[1])
+    if normalized == "commandExecution":
+        return "commandExecution"
+    if normalized == "fileChange":
+        return "fileChange"
+    return None
 
 
 def _build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[str, Any] | None:
@@ -200,10 +205,10 @@ def _build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[s
     tool = _first_string(params, "tool", "name")
     status = _extract_tool_status(params)
     source_method = _tool_source_method(method)
-    if source_method not in {"commandExecution", "fileChange"}:
+    if source_method is None:
         return None
     payload = tool_call_output_delta_payload_from_notification(
-        source_method=cast(ToolCallSourceMethod, source_method),
+        source_method=source_method,
         delta=delta,
         call_id=call_id,
         tool=tool,
