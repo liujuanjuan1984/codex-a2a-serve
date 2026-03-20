@@ -173,6 +173,8 @@ Current implementation note:
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
 - `A2A_DOCUMENTATION_URL`: optional URL exposed via Agent Card
   `documentationUrl`
+- `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides
+  within the configured workspace boundary, default `true`
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for
   `(identity, contextId) -> Codex session_id`, default `3600`
 - `A2A_SESSION_CACHE_MAXSIZE`: max cache entries, default `10000`
@@ -360,7 +362,6 @@ described first in [README.md](../README.md) and above in this guide.
 
 ### Tool Call Payload Contract
 
-- `tool_call` payload contract:
 - The same shape is published in the machine-readable streaming extension
   contract under `tool_call_payload_contract`.
 
@@ -373,15 +374,15 @@ described first in [README.md](../README.md) and above in this guide.
 `item/completed` are normalized into `kind=state`; `item/*/outputDelta`
 notifications are normalized into `kind=output_delta`.
 
-  Examples:
+Examples:
 
-  ```json
-  {"kind":"state","tool":"bash","call_id":"call-1","status":"running"}
-  ```
+```json
+{"kind":"state","tool":"bash","call_id":"call-1","status":"running"}
+```
 
-  ```json
-  {"kind":"output_delta","source_method":"commandExecution","tool":"bash","call_id":"call-1","status":"running","output_delta":"Passed\n"}
-  ```
+```json
+{"kind":"output_delta","source_method":"commandExecution","tool":"bash","call_id":"call-1","status":"running","output_delta":"Passed\n"}
+```
 ### Directory and Error Handling
 
 - For validation failures, missing context (`task_id`/`context_id`), or

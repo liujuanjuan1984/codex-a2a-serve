@@ -29,6 +29,19 @@ from tests.helpers import DummySessionQueryCodexClient as DummyCodexClient
 from tests.helpers import make_settings
 
 
+def _extract_heading_section(markdown: str, heading: str) -> str:
+    marker = f"## {heading}\n"
+    start = markdown.find(marker)
+    if start < 0:
+        raise AssertionError(f"Missing heading {heading!r} in docs/guide.md.")
+
+    start += len(marker)
+    end = markdown.find("\n## ", start)
+    if end < 0:
+        end = len(markdown)
+    return markdown[start:end]
+
+
 def _example_params_include_field(payload: object, dotted_field: str) -> bool:
     current = payload
     for segment in dotted_field.split("."):
@@ -273,6 +286,26 @@ def test_guide_mentions_declared_streaming_contract_fields() -> None:
         assert fragment in guide_text, (
             f"docs/guide.md is missing streaming contract fragment {fragment!r}."
         )
+
+
+def test_guide_environment_variables_match_settings_aliases() -> None:
+    import re
+
+    from codex_a2a_server.config import Settings
+
+    guide_text = Path("docs/guide.md").read_text()
+    env_section = _extract_heading_section(guide_text, "Environment Variables")
+    documented_names = set(re.findall(r"`((?:A2A|CODEX)_[A-Z0-9_]+)`", env_section))
+
+    setting_aliases = {
+        field.alias
+        for field in Settings.model_fields.values()
+        if isinstance(field.alias, str) and field.alias.startswith(("A2A_", "CODEX_"))
+    }
+
+    assert documented_names == setting_aliases, (
+        "docs/guide.md Environment Variables drifted from Settings aliases."
+    )
 
 
 def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
