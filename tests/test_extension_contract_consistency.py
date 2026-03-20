@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -249,6 +251,28 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
         post_contract["compatibility_profile"]
         == ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params
     )
+
+
+def test_guide_mentions_declared_streaming_contract_fields() -> None:
+    guide_text = Path("docs/guide.md").read_text()
+    streaming_contract = build_streaming_extension_params()
+
+    required_doc_fragments = [
+        streaming_contract["artifact_metadata_field"],
+        streaming_contract["session_metadata_field"],
+        streaming_contract["session_fields"]["title"],
+        streaming_contract["interrupt_fields"]["phase"],
+        streaming_contract["interrupt_fields"]["resolution"],
+        streaming_contract["usage_fields"]["reasoning_tokens"],
+        streaming_contract["usage_fields"]["cache_read_tokens"],
+        streaming_contract["usage_fields"]["raw"],
+        "tool_call_payload_contract",
+    ]
+
+    for fragment in required_doc_fragments:
+        assert fragment in guide_text, (
+            f"docs/guide.md is missing streaming contract fragment {fragment!r}."
+        )
 
 
 def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:

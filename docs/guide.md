@@ -314,7 +314,8 @@ described first in [README.md](../README.md) and above in this guide.
   `metadata.shared.stream`.
 - Session projections are normalized under `metadata.shared.session`, with
   `id` as the canonical field and optional `title` when the upstream surface
-  provides one.
+  provides one. The corresponding leaf fields are
+  `metadata.shared.session.id` and `metadata.shared.session.title`.
 - A final snapshot is emitted only when stream chunks did not already produce
   the same final text.
 - Stream routing is schema-first: the service classifies chunks primarily by
@@ -333,8 +334,10 @@ described first in [README.md](../README.md) and above in this guide.
   boundaries.
 - Final status event metadata may include normalized token usage at
   `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`,
-  `total_tokens`, optional `reasoning_tokens`, cache read/write counters, raw
-  upstream token payload, and optional `cost`.
+  `total_tokens`, optional `metadata.shared.usage.reasoning_tokens`,
+  `metadata.shared.usage.cache_tokens.read_tokens`,
+  `metadata.shared.usage.cache_tokens.write_tokens`,
+  `metadata.shared.usage.raw`, and optional `cost`.
 - Interrupt lifecycle is explicit:
   - asked events (`permission.asked` / `question.asked`) are mapped to
     `TaskStatusUpdateEvent(final=false, state=input-required)` with

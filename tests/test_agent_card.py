@@ -118,6 +118,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "tool_call": "DataPart",
     }
     assert streaming.params["stream_fields"]["sequence"] == "metadata.shared.stream.sequence"
+    assert streaming.params["status_stream_fields"]["event_id"] == "metadata.shared.stream.event_id"
     assert streaming.params["session_fields"]["title"] == "metadata.shared.session.title"
     assert streaming.params["interrupt_fields"]["phase"] == "metadata.shared.interrupt.phase"
     assert (
@@ -132,6 +133,17 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         == "metadata.shared.usage.cache_tokens.read_tokens"
     )
     assert streaming.params["usage_fields"]["raw"] == "metadata.shared.usage.raw"
+    assert streaming.params["artifact_stream_contract"]["required_fields"] == [
+        "block_type",
+        "source",
+    ]
+    assert streaming.params["status_stream_contract"]["required_fields"] == ["source"]
+    assert streaming.params["session_contract"]["required_fields"] == ["id"]
+    assert streaming.params["interrupt_contract"]["open_object_fields"] == ["details"]
+    assert streaming.params["usage_contract"]["nested_objects"]["cache_tokens"] == {
+        "required_fields": [],
+        "optional_fields": ["read_tokens", "write_tokens"],
+    }
     tool_call_contract = streaming.params["tool_call_payload_contract"]
     assert tool_call_contract["a2a_part_type"] == "DataPart"
     assert tool_call_contract["discriminator"] == {
